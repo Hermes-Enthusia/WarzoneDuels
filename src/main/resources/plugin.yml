@@ -1,0 +1,24 @@
+name: WarzoneDuels
+main: dev.minecraft.warzoneduels.WarzoneDuelsPlugin
+version: 1.0.0
+api-version: "1.21"
+softdepend: [Vault, EnthusiaTeleport, CombatLogX, Plan]
+commands:
+  duel:
+    description: Death Duel commands and setup tools.
+    usage: /duel <player|accept|deny|review|draw|surrender|cancel|vault|info|settings|reload|restoreloadout|stats>
+  surrender:
+    description: Request a duel draw / surrender.
+    usage: /surrender
+    aliases: [draw]
+  vault:
+    description: Open your unclaimed duel vault.
+    usage: /vault
+    aliases: [spoils, claimspoils, duelvault]
+  stats:
+    description: View Death Duel stats.
+    usage: /stats [player]
+permissions:
+  warzoneduels.admin:
+    description: Admin commands for WarzoneDuels.
+    default: op

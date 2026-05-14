@@ -1,0 +1,201 @@
+# WarzoneDuels
+# This plugin currently supports one global duel arena and one active duel at a time.
+# The arena bounds should cover the full colosseum / viewing structure.
+# Spectators are not plugin-managed yet, so this cuboid is used mainly for duel containment and arena reset.
+
+messages:
+  prefix: "&6[Duel]&r "
+  no-permission: "&cYou do not have permission."
+  no-arena: "&cDuel arena is not configured."
+  duel-already-running: "&cThe duel arena is currently occupied."
+  not-in-duel: "&cYou are not in an active duel."
+  no-builder: "&cYou do not have an open duel setup."
+  no-pending-request: "&cYou do not have a pending duel request."
+  self-duel: "&cYou cannot duel yourself."
+  target-offline: "&cThat player is not online."
+  target-busy: "&cThat player is already busy with a duel."
+  player-in-combat: "&cYou cannot start or accept a duel while in combat."
+  target-in-combat: "&c{player} is currently in combat and cannot duel right now."
+  same-ip-blocked: "&cThat player is on the same IP and cannot duel you."
+  must-be-at-spawn: "&cBoth players must be inside the spawn duel area to send or accept a duel."
+  request-sent: "&aDuel request sent to &e{player}&a."
+  request-expired: "&cYour duel request to &e{player}&c expired."
+  request-received: "&6Duel request from &e{player}&6."
+  request-accept: "&aType &e/duel accept &ato start or &e/duel deny &ato decline."
+  request-denied: "&cYour duel request was denied."
+  cannot-afford: "&c{player} cannot afford the wager."
+  spoils-blocked-self: "&cYou must claim your existing victor's spoils before starting or accepting another duel."
+  spoils-blocked-target: "&c{player} has unclaimed victor's spoils and cannot duel yet."
+  duel-start: "&6Duel started: &e{p1} &6vs &e{p2}&6{wager}."
+  duel-end: "&6Duel ended: &e{winner}&6 won{wager}."
+  duel-draw: "&6Duel ended in a draw."
+  draw-requested: "&e{player} &6requested a draw. Both players must agree."
+  blocked-command: "&cCommands are locked during an active duel."
+  chat-blocked: "&cChat is disabled during an active duel."
+  teleport-blocked: "&cYou cannot teleport out of an active duel."
+  arena-exit-blocked: "&cYou cannot leave the duel arena."
+  arena-combat-entry-blocked: "&cYou cannot enter the duel arena while in combat."
+  combat-item-blocked: "&cThat item is disabled for this duel."
+  disconnect-grace: "&e{player} disconnected. They have &6{seconds}s &eto rejoin before they lose."
+  disconnect-loss: "&c{player} failed to rejoin in time and forfeited the duel."
+  duel-countdown: "&eDuel begins in &6{seconds}&e..."
+  duel-released: "&aFight!"
+  rejoined-duel: "&aYou rejoined your duel. You were returned to your arena spawn."
+  duel-resumed: "&eWarzoneDuels reloaded. Your duel was restored."
+  settings-header: "&6Active Duel Settings:"
+  settings-none: "&7No active duel."
+  wager-disabled: "&cWagers are disabled because no economy provider is available."
+  spoils-created: "&aVault captured from &e{player}&a. Use &e/vault &ato claim it."
+  spoils-inventory-full: "&cYou need more empty inventory space to claim that item."
+  no-spoils: "&7You do not have any unclaimed duel vaults."
+
+arena:
+  # The world that contains the single duel arena.
+  world: world
+
+  # Full arena / colosseum bounds. This should cover the entire structure, not just the fighting pit.
+  pos1: "-193,222,-370"
+  pos2: "-83,131,-263"
+
+  # Combatant spawn stand-blocks inside the arena.
+  spawn1: "-140.5,172,-299.5"
+  spawn2: "-140.5,172,-339.5"
+
+  # Reserved for future spectator features.
+  spectator: "-140,182,-319"
+
+  # Fallback evacuation point if EnthusiaTeleport is not installed or cannot resolve server spawn.
+  # On duel end / restart recovery, the plugin prefers EnthusiaTeleport's spawn location first.
+  exit: "0,80,0"
+
+settings:
+  # Pending duel request lifetime in seconds.
+  request-expire-seconds: 120
+
+  # Disconnect grace during an active duel before the offline player forfeits.
+  disconnect-grace-seconds: 30
+
+  # Maximum allowed wager per player.
+  max-wager: 100000
+
+  # Same-IP duel protection.
+  allow-same-ip-duels: false
+
+  # Blocks CombatLogX-tagged players from entering the arena shell.
+  block-combat-entry: true
+
+  # If true, any water/lava left in the arena is removed during cleanup.
+  allow-water-drain: true
+
+  # If place/break mode is not full snapshot mode, tracked placed blocks are cleared on cleanup.
+  clear-placed-blocks-when-no-break: true
+
+  # All commands are blocked during an active duel except entries listed here.
+  # Entries are matched against the full command line after the leading slash is removed.
+  allowed-duel-commands:
+    - duel draw
+    - duel surrender
+    - duel cancel
+    - duel info
+    - duel settings
+
+matchmaking-spawn:
+  # Both players must be inside this cuboid to send or accept a duel request.
+  world: world
+  corner1:
+    x: -218
+    z: -404
+  corner2:
+    x: 219
+    z: 188
+  min-y: -64
+  max-y: 320
+
+terrain:
+  # Exact arena footprint file copied from the purpur block scan.
+  # Only blocks inside this footprint are touched by map save/load/reset.
+  footprint-file: "arena-footprint.yml"
+
+  # Directory under the plugin data folder that stores compressed terrain snapshots.
+  snapshot-directory: "maps"
+
+  # Main-thread work budget for admin map saves.
+  # Higher values finish faster but spend more time per tick reading block data.
+  capture-blocks-per-tick: 900
+
+  # Main-thread work budget for map restores before/after duels.
+  # Higher values finish faster but increase per-tick block mutation cost.
+  restore-blocks-per-tick: 2400
+
+  # When the server starts without an active duel to resume, restore the default map automatically.
+  restore-default-on-startup: true
+
+economy:
+  enable-wagers: true
+
+plan:
+  # Optional Plan Player Analytics integration.
+  # When enabled and Plan is installed, WarzoneDuels registers a staff analytics dashboard and summary values.
+  enabled: true
+
+analytics:
+  # How long duel history is kept before cleanup prunes old records.
+  # Use 0 or a negative value only if you intentionally want to keep everything forever.
+  retention-days: 365
+
+  # How often the cleanup task runs.
+  cleanup-interval-minutes: 30
+
+  # How many recent duels the dashboard should show by default.
+  recent-duels-limit: 20
+
+spoils:
+  # How long unclaimed victor's spoils are kept before deletion.
+  expiry-hours: 24
+
+  # How often expired spoils are cleaned up from storage.
+  cleanup-interval-minutes: 5
+
+maps:
+  # `default` marks the baseline arena state that should exist when no duel is active.
+  # `supports-place-only` controls whether protected placement formats are allowed on the map.
+  # `supports-block-breaking` controls whether original terrain may be broken during the duel.
+  # `supports-protected-explosives` controls whether the explosives rules screen should appear
+  # for protected-terrain placement formats such as flat crystal fights.
+  # `schematic-file` and `paste-air` are future-facing hooks for terrain pasting/reset work.
+  flat_arena:
+    default: true
+    display-name: "Flat Arena"
+    description: "Classic flat colosseum floor."
+    icon: "SMOOTH_STONE"
+    available: true
+    supports-place-only: true
+    supports-block-breaking: false
+    supports-protected-explosives: true
+    schematic-file: ""
+    paste-air: false
+    availability-note: "Default map. Safe for standard flat fights."
+
+  forest:
+    display-name: "Forest"
+    description: "Uneven forest terrain for future terrain-based fights."
+    icon: "OAK_SAPLING"
+    available: true
+    supports-place-only: true
+    supports-block-breaking: true
+    supports-protected-explosives: true
+    schematic-file: "forest-map.schem"
+    paste-air: false
+    availability-note: "GUI-ready placeholder. Terrain pasting/reset is not wired yet."
+
+  desert:
+    display-name: "Desert"
+    description: "Open desert terrain for future crystal and movement-heavy fights."
+    icon: "SAND"
+    available: true
+    supports-place-only: true
+    supports-block-breaking: true
+    supports-protected-explosives: true
+    schematic-file: "desert-map.schem"
+    paste-air: false
+    availability-note: "GUI-ready placeholder. Terrain pasting/reset is not wired yet."
