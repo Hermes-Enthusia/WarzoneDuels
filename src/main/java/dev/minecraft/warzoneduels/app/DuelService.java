@@ -70,6 +70,7 @@ public final class DuelService {
     private final Map<UUID, BuilderSession> builders = new HashMap<>();
     private final Set<UUID> oneTimeTeleportAllowance = new HashSet<>();
     private final Set<UUID> allowedArenaItemEntityIds = new HashSet<>();
+    private final Map<BlockKey, Long> allowedArenaItemSpawnLocations = new HashMap<>();
     private final Set<UUID> respawnToSpawn = new HashSet<>();
     private final Set<UUID> recoveryTeleportIds = new HashSet<>();
     private final Set<UUID> activeParticipantIndex = ConcurrentHashMap.newKeySet();
@@ -873,7 +874,10 @@ public final class DuelService {
     }
 
     public boolean shouldSuppressArenaBlockDrops(Location location) {
-        return activeDuel != null && arena != null && arena.contains(location);
+        return activeDuel != null
+            && arena != null
+            && arena.contains(location)
+            && !activeDuel.placedBlocks().contains(BlockKey.fromLocation(location));
     }
 
     public boolean shouldBlockArenaShellPvp(Player victim, Player attacker) {
@@ -890,6 +894,37 @@ public final class DuelService {
         if (itemEntityId != null) {
             allowedArenaItemEntityIds.add(itemEntityId);
         }
+    }
+
+    public void allowArenaItemSpawnAt(Location location) {
+        if (location != null && activeDuel != null && arena != null && arena.contains(location)) {
+            allowedArenaItemSpawnLocations.put(BlockKey.fromLocation(location), System.currentTimeMillis() + 2000L);
+        }
+    }
+
+    public boolean consumeAllowedArenaItemSpawn(Location location) {
+        if (location == null) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        allowedArenaItemSpawnLocations.entrySet().removeIf(entry -> entry.getValue() < now);
+        BlockKey key = BlockKey.fromLocation(location);
+        Long exact = allowedArenaItemSpawnLocations.remove(key);
+        if (exact != null && exact >= now) {
+            return true;
+        }
+        for (int x = location.getBlockX() - 1; x <= location.getBlockX() + 1; x++) {
+            for (int y = location.getBlockY() - 1; y <= location.getBlockY() + 1; y++) {
+                for (int z = location.getBlockZ() - 1; z <= location.getBlockZ() + 1; z++) {
+                    Location nearby = new Location(location.getWorld(), x, y, z);
+                    Long expiresAt = allowedArenaItemSpawnLocations.remove(BlockKey.fromLocation(nearby));
+                    if (expiresAt != null && expiresAt >= now) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     public boolean isAllowedArenaItemEntity(UUID itemEntityId) {
@@ -1268,6 +1303,7 @@ public final class DuelService {
         }
         disconnectSnapshots.clear();
         allowedArenaItemEntityIds.clear();
+        allowedArenaItemSpawnLocations.clear();
         trackedExplosionSources.clear();
         duelCountdownActive = false;
     }

@@ -29,6 +29,7 @@ import org.bukkit.event.entity.ItemDespawnEvent;
 import org.bukkit.event.entity.ItemSpawnEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.entity.ProjectileLaunchEvent;
+import org.bukkit.event.vehicle.VehicleDestroyEvent;
 import org.bukkit.event.player.PlayerItemConsumeEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
@@ -129,6 +130,10 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onItemSpawn(ItemSpawnEvent event) {
+        if (duelService.consumeAllowedArenaItemSpawn(event.getLocation())) {
+            duelService.allowArenaItemPickup(event.getEntity().getUniqueId());
+            return;
+        }
         if (!duelService.shouldSuppressArenaBlockDrops(event.getLocation())) {
             return;
         }
@@ -152,6 +157,17 @@ public final class DuelListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onItemDespawn(ItemDespawnEvent event) {
         duelService.forgetArenaItemEntity(event.getEntity().getUniqueId());
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onVehicleDestroy(VehicleDestroyEvent event) {
+        if (!isTntMinecart(event.getVehicle())) {
+            return;
+        }
+        if (!(event.getAttacker() instanceof Player attacker) || !duelService.isInActiveDuel(attacker.getUniqueId())) {
+            return;
+        }
+        duelService.allowArenaItemSpawnAt(event.getVehicle().getLocation());
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -561,6 +577,10 @@ public final class DuelListener implements Listener {
             case "TNT_MINECART", "MINECART_TNT" -> Material.TNT_MINECART;
             default -> null;
         };
+    }
+
+    private boolean isTntMinecart(Entity entity) {
+        return entity != null && (entity.getType().name().equals("TNT_MINECART") || entity.getType().name().equals("MINECART_TNT"));
     }
 
     private String blockExplosionKey(BlockExplodeEvent event) {
