@@ -2,6 +2,9 @@ package dev.minecraft.warzoneduels.adapter.bukkit.reset;
 
 import dev.minecraft.warzoneduels.BlockKey;
 import dev.minecraft.warzoneduels.domain.ArenaDefinition;
+import dev.minecraft.warzoneduels.domain.terrain.ArenaFootprint;
+import dev.minecraft.warzoneduels.domain.terrain.FootprintBlock;
+import org.bukkit.Chunk;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -63,14 +66,41 @@ public final class ArenaResetService {
         });
     }
 
+    public void clearFluids(ArenaDefinition arena, ArenaFootprint footprint) {
+        World world = arena.world();
+        if (world == null || footprint == null || footprint.isEmpty()) {
+            return;
+        }
+        for (FootprintBlock footprintBlock : footprint.orderedBlocks()) {
+            Block block = world.getBlockAt(footprintBlock.x(), footprintBlock.y(), footprintBlock.z());
+            if (block.getType() == Material.WATER || block.getType() == Material.LAVA) {
+                block.setType(Material.AIR, false);
+            }
+        }
+    }
+
     public void clearNonPlayerEntities(ArenaDefinition arena) {
         World world = arena.world();
         if (world == null) {
             return;
         }
-        for (Entity entity : world.getEntities()) {
-            if (!(entity instanceof Player) && arena.contains(entity.getLocation())) {
-                entity.remove();
+        Location pos1 = arena.pos1();
+        Location pos2 = arena.pos2();
+        int minChunkX = Math.floorDiv(Math.min(pos1.getBlockX(), pos2.getBlockX()), 16);
+        int maxChunkX = Math.floorDiv(Math.max(pos1.getBlockX(), pos2.getBlockX()), 16);
+        int minChunkZ = Math.floorDiv(Math.min(pos1.getBlockZ(), pos2.getBlockZ()), 16);
+        int maxChunkZ = Math.floorDiv(Math.max(pos1.getBlockZ(), pos2.getBlockZ()), 16);
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                if (!world.isChunkLoaded(chunkX, chunkZ)) {
+                    continue;
+                }
+                Chunk chunk = world.getChunkAt(chunkX, chunkZ);
+                for (Entity entity : chunk.getEntities()) {
+                    if (!(entity instanceof Player) && arena.contains(entity.getLocation())) {
+                        entity.remove();
+                    }
+                }
             }
         }
     }

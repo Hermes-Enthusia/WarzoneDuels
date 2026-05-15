@@ -18,7 +18,12 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockDropItemEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.BlockBurnEvent;
+import org.bukkit.event.block.BlockFadeEvent;
+import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.block.BlockIgniteEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
@@ -105,9 +110,21 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onBucketEmpty(PlayerBucketEmptyEvent event) {
+        if (duelService.isDuelCountdownActive() && duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
         if (duelService.shouldProtectArenaShellBlock(event.getBlockClicked().getLocation(), event.getPlayer())
             || duelService.shouldProtectArenaShellBlock(event.getBlock().getLocation(), event.getPlayer())) {
             event.setCancelled(true);
+            return;
+        }
+        if (!duelService.isBlockPlaceAllowed(event.getBlock(), event.getBucket(), event.getPlayer())) {
+            event.setCancelled(true);
+            return;
+        }
+        if (duelService.runtimeState() == DuelRuntimeState.ACTIVE && duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
+            duelService.trackPlacedBlock(event.getBlock());
         }
     }
 
@@ -115,6 +132,51 @@ public final class DuelListener implements Listener {
     public void onBucketFill(PlayerBucketFillEvent event) {
         if (duelService.shouldProtectArenaShellBlock(event.getBlockClicked().getLocation(), event.getPlayer())
             || duelService.shouldProtectArenaShellBlock(event.getBlock().getLocation(), event.getPlayer())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBlockFromTo(BlockFromToEvent event) {
+        if (duelService.shouldBlockArenaLiquidFlow(event.getBlock().getLocation(), event.getToBlock().getLocation())) {
+            event.setCancelled(true);
+            return;
+        }
+        if (duelService.runtimeState() == DuelRuntimeState.ACTIVE && duelService.isInsideArenaShell(event.getToBlock().getLocation())) {
+            duelService.trackPlacedBlock(event.getToBlock());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBlockIgnite(BlockIgniteEvent event) {
+        boolean environmentalIgnition = event.getCause() == BlockIgniteEvent.IgniteCause.SPREAD
+            || event.getCause() == BlockIgniteEvent.IgniteCause.LAVA
+            || event.getCause() == BlockIgniteEvent.IgniteCause.LIGHTNING;
+        if (environmentalIgnition && duelService.shouldBlockArenaEnvironmentalBlockChange(event.getBlock().getLocation())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBlockBurn(BlockBurnEvent event) {
+        if (duelService.shouldBlockArenaEnvironmentalBlockChange(event.getBlock().getLocation())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBlockSpread(BlockSpreadEvent event) {
+        if (duelService.shouldBlockArenaEnvironmentalBlockChange(event.getBlock().getLocation())) {
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onBlockFade(BlockFadeEvent event) {
+        if (event.getBlock().getType() == Material.FIRE || event.getBlock().getType() == Material.SOUL_FIRE) {
+            return;
+        }
+        if (duelService.shouldBlockArenaEnvironmentalBlockChange(event.getBlock().getLocation())) {
             event.setCancelled(true);
         }
     }

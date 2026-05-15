@@ -7,17 +7,33 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 
 public final class PlayerStatsStore {
     private final WarzoneDuelsPlugin plugin;
     private final File file;
+    private final ExecutorService writer;
+    private final Object saveLock = new Object();
 
     public PlayerStatsStore(WarzoneDuelsPlugin plugin) {
         this.plugin = plugin;
         this.file = new File(plugin.getDataFolder(), "stats.yml");
+        this.writer = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "WarzoneDuels-StatsStore");
+            thread.setDaemon(true);
+            return thread;
+        });
     }
 
     public Map<UUID, PlayerDuelStats> load() {
@@ -53,9 +69,50 @@ public final class PlayerStatsStore {
     }
 
     public void save(Map<UUID, PlayerDuelStats> stats) {
+        saveSnapshot(snapshot(stats.values()));
+    }
+
+    public void saveAsync(Map<UUID, PlayerDuelStats> stats) {
+        List<StatsSnapshot> snapshot = snapshot(stats.values());
+        try {
+            writer.execute(() -> saveSnapshot(snapshot));
+        } catch (RejectedExecutionException ex) {
+            plugin.getLogger().warning("Duel stats save skipped because the writer is shutting down.");
+        }
+    }
+
+    public void shutdown() {
+        writer.shutdown();
+        try {
+            if (!writer.awaitTermination(5, TimeUnit.SECONDS)) {
+                writer.shutdownNow();
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            writer.shutdownNow();
+        }
+    }
+
+    private List<StatsSnapshot> snapshot(Collection<PlayerDuelStats> stats) {
+        return stats.stream()
+            .map(playerStats -> new StatsSnapshot(
+                playerStats.playerId(),
+                playerStats.lastKnownName(),
+                playerStats.matchesPlayed(),
+                playerStats.wins(),
+                playerStats.losses(),
+                playerStats.draws(),
+                playerStats.disconnectForfeitLosses(),
+                playerStats.currentWinStreak(),
+                playerStats.bestWinStreak()
+            ))
+            .toList();
+    }
+
+    private void saveSnapshot(List<StatsSnapshot> stats) {
         YamlConfiguration yaml = new YamlConfiguration();
         ConfigurationSection section = yaml.createSection("players");
-        for (PlayerDuelStats playerStats : stats.values()) {
+        for (StatsSnapshot playerStats : stats) {
             ConfigurationSection playerSection = section.createSection(playerStats.playerId().toString());
             playerSection.set("last-known-name", playerStats.lastKnownName());
             playerSection.set("matches-played", playerStats.matchesPlayed());
@@ -66,10 +123,39 @@ public final class PlayerStatsStore {
             playerSection.set("current-win-streak", playerStats.currentWinStreak());
             playerSection.set("best-win-streak", playerStats.bestWinStreak());
         }
-        try {
-            yaml.save(file);
-        } catch (IOException ex) {
-            plugin.getLogger().warning("Failed to save duel stats: " + ex.getMessage());
+        saveAtomic(yaml);
+    }
+
+    private void saveAtomic(YamlConfiguration yaml) {
+        synchronized (saveLock) {
+            try {
+                File parent = file.getParentFile();
+                if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                    throw new IOException("Failed to create " + parent.getAbsolutePath());
+                }
+                File temporary = new File(file.getParentFile(), file.getName() + ".tmp");
+                yaml.save(temporary);
+                try {
+                    Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (AtomicMoveNotSupportedException ignored) {
+                    Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
+            } catch (IOException ex) {
+                plugin.getLogger().warning("Failed to save duel stats: " + ex.getMessage());
+            }
         }
+    }
+
+    private record StatsSnapshot(
+        UUID playerId,
+        String lastKnownName,
+        int matchesPlayed,
+        int wins,
+        int losses,
+        int draws,
+        int disconnectForfeitLosses,
+        int currentWinStreak,
+        int bestWinStreak
+    ) {
     }
 }

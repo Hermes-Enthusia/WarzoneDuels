@@ -10,15 +10,15 @@ import org.bukkit.OfflinePlayer;
 
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class StatsService {
     private final PlayerStatsStore store;
-    private final Map<UUID, PlayerDuelStats> statsByPlayerId = new HashMap<>();
+    private final Map<UUID, PlayerDuelStats> statsByPlayerId = new ConcurrentHashMap<>();
 
     public StatsService(PlayerStatsStore store) {
         this.store = store;
@@ -30,6 +30,7 @@ public final class StatsService {
     }
 
     public void disable() {
+        store.shutdown();
         store.save(statsByPlayerId);
     }
 
@@ -130,6 +131,6 @@ public final class StatsService {
     }
 
     private void save() {
-        store.save(statsByPlayerId);
+        store.saveAsync(statsByPlayerId);
     }
 }

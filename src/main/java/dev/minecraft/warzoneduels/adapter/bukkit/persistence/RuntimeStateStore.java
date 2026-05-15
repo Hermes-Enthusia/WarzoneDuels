@@ -14,6 +14,9 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -31,6 +34,7 @@ public final class RuntimeStateStore {
     private final File runtimeFile;
     private final File recoveryFile;
     private final Object lock = new Object();
+    private final Object saveLock = new Object();
 
     private SerializedActiveDuel pendingActiveDuel;
     private BukkitTask queuedActiveSaveTask;
@@ -44,6 +48,10 @@ public final class RuntimeStateStore {
     }
 
     public void queueActiveDuelSave(ActiveDuel duel) {
+        queueActiveDuelSave(duel, ACTIVE_SAVE_DEBOUNCE_TICKS);
+    }
+
+    public void queueActiveDuelSave(ActiveDuel duel, long delayTicks) {
         SerializedActiveDuel snapshot = serializeActiveDuel(duel);
         synchronized (lock) {
             runtimeRevision++;
@@ -52,7 +60,11 @@ public final class RuntimeStateStore {
                 return;
             }
             long expectedRevision = runtimeRevision;
-            queuedActiveSaveTask = Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> flushQueuedActiveDuelSave(expectedRevision), ACTIVE_SAVE_DEBOUNCE_TICKS);
+            queuedActiveSaveTask = Bukkit.getScheduler().runTaskLaterAsynchronously(
+                plugin,
+                () -> flushQueuedActiveDuelSave(expectedRevision),
+                Math.max(1L, delayTicks)
+            );
         }
     }
 
@@ -72,27 +84,32 @@ public final class RuntimeStateStore {
         if (!runtimeFile.exists()) {
             return new PersistedRuntime(null, false);
         }
-        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(runtimeFile);
-        if (!yaml.getBoolean("active")) {
-            return new PersistedRuntime(null, false);
-        }
-        MatchParticipant one = readParticipant(yaml.getConfigurationSection("participant-one"));
-        MatchParticipant two = readParticipant(yaml.getConfigurationSection("participant-two"));
-        if (one == null || two == null) {
-            return new PersistedRuntime(null, false);
-        }
-        DuelSettings settings = readSettings(yaml.getConfigurationSection("settings"));
-        ActiveDuel duel = new ActiveDuel(one, two, settings, yaml.getLong("started-at"));
-        duel.setWagerHeld(yaml.getBoolean("wager-held"));
-        duel.setWagerPot(yaml.getDouble("wager-pot"));
-        for (String value : yaml.getStringList("placed-blocks")) {
-            BlockKey key = deserializeBlockKey(value);
-            if (key != null) {
-                duel.placedBlocks().add(key);
+        try {
+            YamlConfiguration yaml = YamlConfiguration.loadConfiguration(runtimeFile);
+            if (!yaml.getBoolean("active")) {
+                return new PersistedRuntime(null, false);
             }
+            MatchParticipant one = readParticipant(yaml.getConfigurationSection("participant-one"));
+            MatchParticipant two = readParticipant(yaml.getConfigurationSection("participant-two"));
+            if (one == null || two == null) {
+                return new PersistedRuntime(null, false);
+            }
+            DuelSettings settings = readSettings(yaml.getConfigurationSection("settings"));
+            ActiveDuel duel = new ActiveDuel(one, two, settings, yaml.getLong("started-at"));
+            duel.setWagerHeld(yaml.getBoolean("wager-held"));
+            duel.setWagerPot(yaml.getDouble("wager-pot"));
+            for (String value : yaml.getStringList("placed-blocks")) {
+                BlockKey key = deserializeBlockKey(value);
+                if (key != null) {
+                    duel.placedBlocks().add(key);
+                }
+            }
+            duel.setArenaSnapshot(readArenaSnapshot(yaml.getConfigurationSection("arena-snapshot")));
+            return new PersistedRuntime(duel, resumeMarkerFile.exists());
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("Ignoring corrupt runtime duel state: " + ex.getMessage());
+            return new PersistedRuntime(null, false);
         }
-        duel.setArenaSnapshot(readArenaSnapshot(yaml.getConfigurationSection("arena-snapshot")));
-        return new PersistedRuntime(duel, resumeMarkerFile.exists());
     }
 
     public void markReloadResume() {
@@ -139,7 +156,10 @@ public final class RuntimeStateStore {
             return Set.of();
         }
         YamlConfiguration yaml = YamlConfiguration.loadConfiguration(recoveryFile);
-        return yaml.getStringList("players").stream().map(UUID::fromString).collect(Collectors.toSet());
+        return yaml.getStringList("players").stream()
+            .map(this::safeUuid)
+            .filter(java.util.Objects::nonNull)
+            .collect(Collectors.toSet());
     }
 
     public void clearRecoveryTeleportId(UUID playerId) {
@@ -302,7 +322,11 @@ public final class RuntimeStateStore {
         if (section == null) {
             return null;
         }
-        MatchParticipant participant = new MatchParticipant(UUID.fromString(section.getString("id")), section.getString("name", "Unknown"));
+        UUID playerId = safeUuid(section.getString("id"));
+        if (playerId == null) {
+            return null;
+        }
+        MatchParticipant participant = new MatchParticipant(playerId, section.getString("name", "Unknown"));
         participant.setDrawRequested(section.getBoolean("draw-requested"));
         if (section.contains("disconnect-deadline")) {
             participant.setDisconnectDeadlineEpochMs(section.getLong("disconnect-deadline"));
@@ -315,8 +339,8 @@ public final class RuntimeStateStore {
         if (section == null) {
             return settings;
         }
-        settings.setPlaceBreakMode(DuelSettings.PlaceBreakMode.valueOf(section.getString("place-break-mode", DuelSettings.PlaceBreakMode.NONE.name())));
-        settings.setPlaceOnlyMode(DuelSettings.PlaceOnlyMode.valueOf(section.getString("place-only-mode", DuelSettings.PlaceOnlyMode.COBWEB_UTILS.name())));
+        settings.setPlaceBreakMode(safeEnum(DuelSettings.PlaceBreakMode.class, section.getString("place-break-mode"), DuelSettings.PlaceBreakMode.NONE));
+        settings.setPlaceOnlyMode(safeEnum(DuelSettings.PlaceOnlyMode.class, section.getString("place-only-mode"), DuelSettings.PlaceOnlyMode.COBWEB_UTILS));
         settings.setMapId(section.getString("map-id", settings.getMapId()));
         settings.setMapDisplayName(section.getString("map-display-name", settings.getMapDisplayName()));
         settings.setMapDescription(section.getString("map-description", settings.getMapDescription()));
@@ -380,19 +404,61 @@ public final class RuntimeStateStore {
         if (parts.length != 4) {
             return null;
         }
-        return new BlockKey(
-            UUID.fromString(parts[0]),
-            Integer.parseInt(parts[1]),
-            Integer.parseInt(parts[2]),
-            Integer.parseInt(parts[3])
-        );
+        try {
+            UUID worldId = safeUuid(parts[0]);
+            if (worldId == null) {
+                return null;
+            }
+            return new BlockKey(
+                worldId,
+                Integer.parseInt(parts[1]),
+                Integer.parseInt(parts[2]),
+                Integer.parseInt(parts[3])
+            );
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private UUID safeUuid(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private <T extends Enum<T>> T safeEnum(Class<T> type, String raw, T fallback) {
+        if (raw == null || raw.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Enum.valueOf(type, raw);
+        } catch (IllegalArgumentException ignored) {
+            return fallback;
+        }
     }
 
     private void save(YamlConfiguration yaml, File file) {
-        try {
-            yaml.save(file);
-        } catch (IOException ex) {
-            plugin.getLogger().warning("Failed to save " + file.getName() + ": " + ex.getMessage());
+        synchronized (saveLock) {
+            try {
+                File parent = file.getParentFile();
+                if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                    throw new IOException("Failed to create " + parent.getAbsolutePath());
+                }
+                File temporary = new File(file.getParentFile(), file.getName() + ".tmp");
+                yaml.save(temporary);
+                try {
+                    Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (AtomicMoveNotSupportedException ignored) {
+                    Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
+            } catch (IOException ex) {
+                plugin.getLogger().warning("Failed to save " + file.getName() + ": " + ex.getMessage());
+            }
         }
     }
 

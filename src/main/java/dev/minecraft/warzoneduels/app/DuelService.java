@@ -81,7 +81,8 @@ public final class DuelService {
 
     private ArenaDefinition arena;
     private DuelRequest pendingRequest;
-    private ActiveDuel activeDuel;
+    private volatile ActiveDuel activeDuel;
+    private ActiveDuel preparingDuel;
     private QueuedDuelStart queuedDuelStart;
 
     private String prefix;
@@ -142,6 +143,7 @@ public final class DuelService {
     }
 
     public void enable() {
+        loadoutArchiveStore.enable();
         reloadConfig();
         recoveryTeleportIds.clear();
         recoveryTeleportIds.addAll(runtimeStateStore.loadRecoveryTeleportIds());
@@ -152,6 +154,12 @@ public final class DuelService {
         cancelRequestExpiryTask();
         cancelDisconnectMonitorTask();
         cancelQueuedStartTask();
+        cancelCountdownTask();
+
+        if (preparingDuel != null) {
+            refundWagerIfHeld(preparingDuel);
+            preparingDuel = null;
+        }
 
         if (serverStopping) {
             handleServerStoppingDisable();
@@ -162,6 +170,7 @@ public final class DuelService {
             activeDuel = null;
             queuedDuelStart = null;
             rebuildParticipantIndex();
+            loadoutArchiveStore.shutdown();
             return;
         }
 
@@ -172,6 +181,7 @@ public final class DuelService {
             runtimeStateStore.clearRuntime();
             runtimeStateStore.clearReloadResumeMarker();
         }
+        loadoutArchiveStore.shutdown();
     }
 
     public void reloadConfig() {
@@ -479,6 +489,7 @@ public final class DuelService {
         sendToParticipants("messages.draw-requested", "{player}", player.getName());
         if (activeDuel.participantOne().drawRequested() && activeDuel.participantTwo().drawRequested()) {
             concludeDuel(null, DuelEndReason.DRAW, true);
+            return;
         }
         runtimeStateStore.queueActiveDuelSave(activeDuel);
     }
@@ -732,6 +743,9 @@ public final class DuelService {
         if (!participant) {
             return false;
         }
+        if (!arenaTerrainService.containsFootprintBlock(block.getLocation())) {
+            return false;
+        }
         DuelSettings settings = activeDuel.settings();
         if (settings.getPlaceBreakMode() == DuelSettings.PlaceBreakMode.NONE) {
             return false;
@@ -749,7 +763,6 @@ public final class DuelService {
         requirePrimaryThread();
         if (activeDuel != null) {
             activeDuel.placedBlocks().add(BlockKey.fromLocation(block.getLocation()));
-            runtimeStateStore.queueActiveDuelSave(activeDuel);
         }
     }
 
@@ -828,6 +841,28 @@ public final class DuelService {
 
     public boolean isInsideArenaShell(Location location) {
         return arena != null && arena.contains(location);
+    }
+
+    public boolean shouldBlockArenaLiquidFlow(Location from, Location to) {
+        if (arena == null || (from == null && to == null)) {
+            return false;
+        }
+        boolean fromInside = from != null && arena.contains(from);
+        boolean toInside = to != null && arena.contains(to);
+        if (!fromInside && !toInside) {
+            return false;
+        }
+        if (activeDuel == null) {
+            return true;
+        }
+        if (!fromInside || !toInside) {
+            return true;
+        }
+        return !arenaTerrainService.isNearFootprint(to, 3);
+    }
+
+    public boolean shouldBlockArenaEnvironmentalBlockChange(Location location) {
+        return arena != null && location != null && arena.contains(location);
     }
 
     public boolean shouldProtectArenaShellBlock(Location location, Player player) {
@@ -1163,13 +1198,16 @@ public final class DuelService {
         recoveryTeleportIds.addAll(participantIds);
         runtimeStateStore.saveRecoveryTeleportIds(recoveryTeleportIds);
         refundWagerIfHeld();
-        cleanupArenaAfterMatch(finishedDuel, false);
+        duelAnalyticsService.recordDuel(finishedDuel, null, DuelEndReason.SERVER_RESTART);
         for (UUID playerId : participantIds) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null && player.isOnline()) {
                 teleportToExit(player);
             }
         }
+        activeDuel = null;
+        rebuildParticipantIndex();
+        cleanupVolatileArenaState();
     }
 
     private void startDuel(Player requester, Player target, DuelSettings settings) {
@@ -1203,9 +1241,15 @@ public final class DuelService {
             return;
         }
 
+        preparingDuel = stagedDuel;
         sendMessageRaw(requester, ChatColor.YELLOW + "Preparing arena terrain...");
         sendMessageRaw(target, ChatColor.YELLOW + "Preparing arena terrain...");
         arenaTerrainService.loadSnapshot(selectedMap.id(), () -> {
+            if (preparingDuel != stagedDuel) {
+                refundWagerIfHeld(stagedDuel);
+                return;
+            }
+            preparingDuel = null;
             activeDuel = stagedDuel;
             queuedDuelStart = null;
             arenaMapService.prepareArenaForMatch(arena, activeDuel.settings());
@@ -1220,9 +1264,12 @@ public final class DuelService {
             sendMessageRaw(target, ChatColor.RED + "Disconnecting gives you " + disconnectGraceSeconds + " seconds to rejoin before you lose.");
             String wagerText = preparedSettings.getWager() > 0D ? " for $" + formatAmount(preparedSettings.getWager()) : "";
             broadcast("messages.duel-start", "{p1}", requester.getName(), "{p2}", target.getName(), "{wager}", wagerText);
-            runtimeStateStore.queueActiveDuelSave(activeDuel);
+            runtimeStateStore.queueActiveDuelSave(activeDuel, 1L);
             startCountdown(requester, target);
         }, message -> {
+            if (preparingDuel == stagedDuel) {
+                preparingDuel = null;
+            }
             refundWagerIfHeld(stagedDuel);
             sendMessageRaw(requester, ChatColor.RED + message);
             sendMessageRaw(target, ChatColor.RED + message);
@@ -1288,7 +1335,7 @@ public final class DuelService {
             arenaResetService.clearTrackedPlacedBlocks(arena, duel.placedBlocks());
         }
         if (allowWaterDrain) {
-            arenaResetService.clearFluids(arena);
+            arenaResetService.clearFluids(arena, arenaTerrainService.footprint());
         }
         arenaResetService.clearNonPlayerEntities(arena);
         if (restoreDefaultTerrain) {
@@ -1302,9 +1349,15 @@ public final class DuelService {
             }
         }
         disconnectSnapshots.clear();
+        cleanupVolatileArenaState();
+    }
+
+    private void cleanupVolatileArenaState() {
         allowedArenaItemEntityIds.clear();
         allowedArenaItemSpawnLocations.clear();
         trackedExplosionSources.clear();
+        blockedItemMessageCooldowns.clear();
+        pendingForcedDeathIds.clear();
         duelCountdownActive = false;
     }
 
@@ -1369,7 +1422,6 @@ public final class DuelService {
                 if (!hasDisconnectingParticipant()) {
                     cancelDisconnectMonitorTask();
                 }
-                runtimeStateStore.queueActiveDuelSave(activeDuel);
                 return;
             }
             MatchParticipant winner = activeDuel.other(expired.playerId());

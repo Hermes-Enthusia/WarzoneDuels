@@ -13,8 +13,11 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.plugin.IllegalPluginAccessException;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -34,6 +37,7 @@ public final class ArenaTerrainService {
     private final ArenaFootprintStore footprintStore;
     private final ArenaMapSnapshotStore snapshotStore;
     private final Object operationLock = new Object();
+    private final File dirtyMarkerFile;
 
     private ExecutorService ioExecutor;
     private ArenaFootprint footprint;
@@ -57,6 +61,7 @@ public final class ArenaTerrainService {
         this.arenaMapService = arenaMapService;
         this.footprintStore = footprintStore;
         this.snapshotStore = snapshotStore;
+        this.dirtyMarkerFile = new File(plugin.getDataFolder(), "arena-terrain-dirty.marker");
     }
 
     public void enable() {
@@ -70,6 +75,9 @@ public final class ArenaTerrainService {
         disabled = true;
         synchronized (operationLock) {
             if (operation != null && operation.task != null) {
+                if ("restore".equals(operation.type)) {
+                    markDirty("Terrain restore was interrupted while disabling.");
+                }
                 operation.task.cancel();
             }
             operation = null;
@@ -262,7 +270,7 @@ public final class ArenaTerrainService {
             return;
         }
         CompletableFuture<ArenaMapSnapshot> future = snapshotStore.loadAsync(mapId, mapsDirectory, ioExecutor);
-        future.whenComplete((snapshot, throwable) -> Bukkit.getScheduler().runTask(plugin, () -> {
+        future.whenComplete((snapshot, throwable) -> runOnMainIfEnabled(() -> {
             if (disabled || !isCurrentOperation("restore", mapId)) {
                 return;
             }
@@ -279,7 +287,8 @@ public final class ArenaTerrainService {
     }
 
     public void ensureDefaultSnapshotLoaded(Consumer<String> infoReceiver) {
-        if (!restoreDefaultOnStartup || disabled || isBusy()) {
+        boolean dirty = isDirty();
+        if ((!restoreDefaultOnStartup && !dirty) || disabled || isBusy()) {
             return;
         }
         String defaultMapId = arenaMapService.defaultMapId();
@@ -290,6 +299,7 @@ public final class ArenaTerrainService {
             return;
         }
         loadSnapshot(defaultMapId, () -> {
+            clearDirty();
             if (infoReceiver != null) {
                 infoReceiver.accept("Default arena terrain restored.");
             }
@@ -346,7 +356,7 @@ public final class ArenaTerrainService {
     }
 
     private void saveSnapshotAsync(ArenaMapSnapshot snapshot, Runnable success, Consumer<String> failure) {
-        snapshotStore.saveAsync(snapshot, mapsDirectory, ioExecutor).whenComplete((ignored, throwable) -> Bukkit.getScheduler().runTask(plugin, () -> {
+        snapshotStore.saveAsync(snapshot, mapsDirectory, ioExecutor).whenComplete((ignored, throwable) -> runOnMainIfEnabled(() -> {
             if (disabled || !isCurrentOperation("capture", snapshot.mapId())) {
                 return;
             }
@@ -499,6 +509,9 @@ public final class ArenaTerrainService {
     private void failActiveOperation(String message, Consumer<String> failure) {
         TerrainOperation finished = clearOperation();
         if (finished != null && finished.task != null) {
+            if ("restore".equals(finished.type)) {
+                markDirty(message);
+            }
             finished.task.cancel();
         }
         plugin.getLogger().warning(message);
@@ -522,6 +535,42 @@ public final class ArenaTerrainService {
             cursor = cursor.getCause();
         }
         return cursor.getMessage() == null ? cursor.getClass().getSimpleName() : cursor.getMessage();
+    }
+
+    private void runOnMainIfEnabled(Runnable runnable) {
+        if (disabled || !plugin.isEnabled()) {
+            return;
+        }
+        try {
+            Bukkit.getScheduler().runTask(plugin, runnable);
+        } catch (IllegalPluginAccessException ignored) {
+            // The plugin disabled after the completion callback checked isEnabled.
+        }
+    }
+
+    private boolean isDirty() {
+        return dirtyMarkerFile.isFile();
+    }
+
+    private void markDirty(String reason) {
+        try {
+            File parent = dirtyMarkerFile.getParentFile();
+            if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                throw new IOException("Failed to create " + parent.getAbsolutePath());
+            }
+            if (!dirtyMarkerFile.exists() && !dirtyMarkerFile.createNewFile()) {
+                plugin.getLogger().warning("Arena terrain dirty marker could not be created.");
+            }
+            plugin.getLogger().warning(reason + " Arena terrain marked dirty; default terrain will be restored on next safe startup.");
+        } catch (IOException ex) {
+            plugin.getLogger().warning("Failed to mark arena terrain dirty: " + ex.getMessage());
+        }
+    }
+
+    private void clearDirty() {
+        if (dirtyMarkerFile.exists() && !dirtyMarkerFile.delete()) {
+            plugin.getLogger().warning("Failed to clear arena terrain dirty marker.");
+        }
     }
 
     private List<Integer> buildRestoreOrder(List<String> entries) {

@@ -58,7 +58,8 @@ public final class SpoilsService {
             cleanupTask.cancel();
             cleanupTask = null;
         }
-        save();
+        spoilsStore.shutdown();
+        saveSync();
     }
 
     public void reloadConfig() {
@@ -288,6 +289,10 @@ public final class SpoilsService {
     }
 
     private void save() {
+        spoilsStore.saveAsync(entriesById.values(), pendingForcedDeathOnJoin);
+    }
+
+    private void saveSync() {
         spoilsStore.save(entriesById.values(), pendingForcedDeathOnJoin);
     }
 

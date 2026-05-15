@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitTask;
@@ -72,7 +73,11 @@ public final class DuelAnalyticsService {
             return;
         }
         DuelRecord record = buildRecord(duel, winnerId, reason);
-        writer.execute(() -> store.insert(record));
+        try {
+            writer.execute(() -> store.insert(record));
+        } catch (RejectedExecutionException ex) {
+            plugin.getLogger().warning("Skipped duel analytics record because the writer is shutting down.");
+        }
     }
 
     public long countTotalDuels() {
