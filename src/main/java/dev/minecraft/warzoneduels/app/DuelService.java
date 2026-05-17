@@ -626,6 +626,9 @@ public final class DuelService {
             recoveryTeleportIds.remove(player.getUniqueId());
             runtimeStateStore.clearRecoveryTeleportId(player.getUniqueId());
         }
+        if (shouldBlockArenaFootprintEntry(player, player.getLocation())) {
+            handleUnauthorizedArenaEntry(player);
+        }
         if (activeDuel == null) {
             return;
         }
@@ -683,6 +686,17 @@ public final class DuelService {
         requirePrimaryThread();
         teleportToAssignedSpawn(player);
         sendMessage(player, "messages.arena-exit-blocked");
+    }
+
+    public void handleUnauthorizedArenaEntry(Player player) {
+        requirePrimaryThread();
+        teleportToExit(player);
+        String message = plugin.getConfig().getString("messages.arena-entry-blocked", "");
+        if (message == null || message.isBlank()) {
+            sendMessageRaw(player, ChatColor.RED + "Only active duel participants may enter the fighting area.");
+            return;
+        }
+        sendMessage(player, "messages.arena-entry-blocked");
     }
 
     public boolean isAllowedCommandForParticipant(String rawCommand) {
@@ -889,6 +903,16 @@ public final class DuelService {
             return false;
         }
         return combatTagPort.isInCombat(player);
+    }
+
+    public boolean shouldBlockArenaFootprintEntry(Player player, Location to) {
+        if (player == null || arena == null || to == null) {
+            return false;
+        }
+        if (isInActiveDuel(player.getUniqueId())) {
+            return false;
+        }
+        return arenaTerrainService.isNearFootprint(to, 1);
     }
 
     public boolean isNearArenaTerrain(Location location, int radius) {

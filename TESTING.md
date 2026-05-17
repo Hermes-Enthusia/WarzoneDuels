@@ -71,6 +71,8 @@ Before testing:
 - Expected: blocked and request cleared safely.
 - Try walking into the arena shell while CombatLogX-tagged and not in a duel.
 - Expected: entry blocked by WarzoneDuels/WorldGuard setup.
+- Try walking, pearling, chorusing, or glitching into the scanned fighting footprint while not participating in a duel.
+- Expected: nonparticipants are blocked or evacuated; only active duel participants can enter the fighting footprint.
 - Start a duel and confirm both participants have their external combat state cleared.
 
 ## 5. Wagers And Economy Safety

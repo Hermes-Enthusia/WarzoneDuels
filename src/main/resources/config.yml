@@ -34,6 +34,7 @@ messages:
   chat-blocked: "&cChat is disabled during an active duel."
   teleport-blocked: "&cYou cannot teleport out of an active duel."
   arena-exit-blocked: "&cYou cannot leave the duel arena."
+  arena-entry-blocked: "&cOnly active duel participants may enter the fighting area."
   arena-combat-entry-blocked: "&cYou cannot enter the duel arena while in combat."
   combat-item-blocked: "&cThat item is disabled for this duel."
   disconnect-grace: "&e{player} disconnected. They have &6{seconds}s &eto rejoin before they lose."

@@ -512,6 +512,11 @@ public final class DuelListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
         Location to = event.getTo();
+        if (duelService.shouldBlockArenaFootprintEntry(event.getPlayer(), to)) {
+            event.setTo(event.getFrom());
+            duelService.handleUnauthorizedArenaEntry(event.getPlayer());
+            return;
+        }
         if (duelService.shouldBlockArenaShellEntry(event.getPlayer(), event.getFrom(), to)) {
             event.setTo(event.getFrom());
             duelService.sendMessage(event.getPlayer(), "messages.arena-combat-entry-blocked");
@@ -559,6 +564,10 @@ public final class DuelListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onTeleport(PlayerTeleportEvent event) {
         if (!duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
+            if (duelService.shouldBlockArenaFootprintEntry(event.getPlayer(), event.getTo())) {
+                event.setCancelled(true);
+                duelService.sendMessage(event.getPlayer(), "messages.arena-entry-blocked");
+            }
             return;
         }
         if (duelService.isTeleportAllowed(event.getPlayer().getUniqueId())) {
