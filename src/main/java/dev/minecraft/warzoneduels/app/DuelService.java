@@ -108,6 +108,7 @@ public final class DuelService {
     private BukkitTask disconnectMonitorTask;
     private BukkitTask countdownTask;
     private BukkitTask queuedStartTask;
+    private BukkitTask containmentTask;
     private boolean duelCountdownActive;
 
     public DuelService(
@@ -155,6 +156,7 @@ public final class DuelService {
         cancelDisconnectMonitorTask();
         cancelQueuedStartTask();
         cancelCountdownTask();
+        cancelContainmentTask();
 
         if (preparingDuel != null) {
             refundWagerIfHeld(preparingDuel);
@@ -1210,6 +1212,7 @@ public final class DuelService {
             }
         }
         startDisconnectMonitor();
+        startContainmentMonitor();
     }
 
     private void handleServerStoppingDisable() {
@@ -1284,6 +1287,7 @@ public final class DuelService {
             teleportToAssignedSpawn(requester);
             teleportToAssignedSpawn(target);
             rebuildParticipantIndex();
+            startContainmentMonitor();
             sendMessageRaw(requester, ChatColor.RED + "Disconnecting gives you " + disconnectGraceSeconds + " seconds to rejoin before you lose.");
             sendMessageRaw(target, ChatColor.RED + "Disconnecting gives you " + disconnectGraceSeconds + " seconds to rejoin before you lose.");
             String wagerText = preparedSettings.getWager() > 0D ? " for $" + formatAmount(preparedSettings.getWager()) : "";
@@ -1310,6 +1314,7 @@ public final class DuelService {
         UUID winnerId = winner == null ? null : winner.getUniqueId();
         cancelCountdownTask();
         cancelDisconnectMonitorTask();
+        cancelContainmentTask();
 
         if (winner != null) {
             payoutWager(winner);
@@ -1505,6 +1510,44 @@ public final class DuelService {
         if (countdownTask != null) {
             countdownTask.cancel();
             countdownTask = null;
+        }
+    }
+
+    private void startContainmentMonitor() {
+        if (activeDuel == null || containmentTask != null) {
+            return;
+        }
+        containmentTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (activeDuel == null) {
+                cancelContainmentTask();
+                return;
+            }
+            enforceParticipantContainment(activeDuel.participantOne().playerId());
+            enforceParticipantContainment(activeDuel.participantTwo().playerId());
+        }, 5L, 5L);
+    }
+
+    private void enforceParticipantContainment(UUID playerId) {
+        Player player = Bukkit.getPlayer(playerId);
+        if (player == null || !player.isOnline() || player.isDead()) {
+            return;
+        }
+        if (!isParticipantInsideAllowedArena(player.getLocation())) {
+            handleArenaExitAttempt(player);
+        }
+    }
+
+    private boolean isParticipantInsideAllowedArena(Location location) {
+        return arena != null
+            && location != null
+            && arena.contains(location)
+            && arenaTerrainService.isNearFootprint(location, 2);
+    }
+
+    private void cancelContainmentTask() {
+        if (containmentTask != null) {
+            containmentTask.cancel();
+            containmentTask = null;
         }
     }
 

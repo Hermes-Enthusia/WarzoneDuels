@@ -114,6 +114,8 @@ Before testing:
 
 - Try walking out of the fighting footprint.
 - Expected: participant is teleported back to their assigned arena spawn.
+- Glitch a participant outside the allowed fighting footprint and stop moving.
+- Expected: containment monitor returns the participant to their assigned arena spawn within a few ticks.
 - Try pearls with pearls disabled.
 - Expected: launch/use blocked with chat message.
 - Try pearls with pearls enabled and no cooldown.
