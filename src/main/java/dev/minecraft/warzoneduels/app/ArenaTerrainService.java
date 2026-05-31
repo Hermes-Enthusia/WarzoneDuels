@@ -166,6 +166,31 @@ public final class ArenaTerrainService {
         return false;
     }
 
+    public boolean isWithinFootprintColumn(Location location, int verticalRadius) {
+        if (location == null || location.getWorld() == null || footprint == null) {
+            return false;
+        }
+        if (!location.getWorld().getName().equalsIgnoreCase(footprint.worldName())) {
+            return false;
+        }
+
+        int x = location.getBlockX();
+        int z = location.getBlockZ();
+        if (x < footprint.minX() || x > footprint.maxX() || z < footprint.minZ() || z > footprint.maxZ()) {
+            return false;
+        }
+
+        int radius = Math.max(0, verticalRadius);
+        int minY = Math.max(footprint.minY(), location.getBlockY() - radius);
+        int maxY = Math.min(footprint.maxY(), location.getBlockY() + radius);
+        for (int y = minY; y <= maxY; y++) {
+            if (footprint.contains(x, y, z)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public Location findPlayableLocation(Location preferred) {
         if (footprint == null || footprint.isEmpty()) {
             return null;

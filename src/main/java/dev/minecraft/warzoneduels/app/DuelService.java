@@ -77,6 +77,7 @@ public final class DuelService {
     private final Map<UUID, LoadoutSnapshot> disconnectSnapshots = new HashMap<>();
     private final Set<UUID> pendingForcedDeathIds = new HashSet<>();
     private final Map<UUID, Long> blockedItemMessageCooldowns = new HashMap<>();
+    private final Map<UUID, Long> arenaExitMessageCooldowns = new HashMap<>();
     private final Map<UUID, Material> trackedExplosionSources = new HashMap<>();
 
     private ArenaDefinition arena;
@@ -687,7 +688,7 @@ public final class DuelService {
     public void handleArenaExitAttempt(Player player) {
         requirePrimaryThread();
         teleportToAssignedSpawn(player);
-        sendMessage(player, "messages.arena-exit-blocked");
+        sendArenaExitBlockedMessage(player);
     }
 
     public void handleUnauthorizedArenaEntry(Player player) {
@@ -922,7 +923,10 @@ public final class DuelService {
     }
 
     public boolean isAllowedDuelTeleportDestination(Location location) {
-        return isNearArenaTerrain(location, 2);
+        return arena != null
+            && location != null
+            && arena.contains(location)
+            && arenaTerrainService.isWithinFootprintColumn(location, 6);
     }
 
     public Location chorusFallbackDestination(Player player) {
@@ -1386,6 +1390,7 @@ public final class DuelService {
         allowedArenaItemSpawnLocations.clear();
         trackedExplosionSources.clear();
         blockedItemMessageCooldowns.clear();
+        arenaExitMessageCooldowns.clear();
         pendingForcedDeathIds.clear();
         duelCountdownActive = false;
     }
@@ -1541,7 +1546,7 @@ public final class DuelService {
         return arena != null
             && location != null
             && arena.contains(location)
-            && arenaTerrainService.isNearFootprint(location, 2);
+            && arenaTerrainService.isWithinFootprintColumn(location, 6);
     }
 
     private void cancelContainmentTask() {
@@ -1694,6 +1699,19 @@ public final class DuelService {
         }
         blockedItemMessageCooldowns.put(player.getUniqueId(), now);
         sendMessage(player, "messages.combat-item-blocked");
+    }
+
+    private void sendArenaExitBlockedMessage(Player player) {
+        if (player == null) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        Long lastSent = arenaExitMessageCooldowns.get(player.getUniqueId());
+        if (lastSent != null && now - lastSent < 1500L) {
+            return;
+        }
+        arenaExitMessageCooldowns.put(player.getUniqueId(), now);
+        sendMessage(player, "messages.arena-exit-blocked");
     }
 
     private void sendToParticipants(String path, String... replacements) {
