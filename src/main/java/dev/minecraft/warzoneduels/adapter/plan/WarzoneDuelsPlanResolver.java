@@ -204,11 +204,14 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
 
     private void renderSummaryCards(StringBuilder html) {
         html.append("<div class=\"grid cards\">");
-        html.append(card("Total Duels", formatNumber(analyticsService.countTotalDuels())));
-        html.append(card("Duels 24h", formatNumber(analyticsService.countDuelsSince(Duration.ofHours(24)))));
-        html.append(card("Duels 7d", formatNumber(analyticsService.countDuelsSince(Duration.ofDays(7)))));
-        html.append(card("Active Duels", duelService.hasActiveDuel() ? "1" : "0"));
-        html.append(card("Most Used Map", analyticsService.mostUsedMapSince(Duration.ofDays(30))));
+        appendCards(
+            html,
+            card("Total Duels", formatNumber(analyticsService.countTotalDuels())),
+            card("Duels 24h", formatNumber(analyticsService.countDuelsSince(Duration.ofHours(24)))),
+            card("Duels 7d", formatNumber(analyticsService.countDuelsSince(Duration.ofDays(7)))),
+            card("Active Duels", duelService.hasActiveDuel() ? "1" : "0"),
+            card("Most Used Map", analyticsService.mostUsedMapSince(Duration.ofDays(30)))
+        );
         html.append("</div>");
     }
 
@@ -264,14 +267,17 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
                 <h2>Player Focus: %s</h2>
                 <div class="grid cards">
             """.formatted(escapeHtml(displayName)));
-        html.append(card("Matches", formatNumber(stats == null ? analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(3650)) : stats.matchesPlayed())));
-        html.append(card("Wins", formatNumber(stats == null ? 0 : stats.wins())));
-        html.append(card("Losses", formatNumber(stats == null ? 0 : stats.losses())));
-        html.append(card("Draws", formatNumber(stats == null ? 0 : stats.draws())));
-        html.append(card("Current Streak", formatNumber(stats == null ? 0 : stats.currentWinStreak())));
-        html.append(card("Best Streak", formatNumber(stats == null ? 0 : stats.bestWinStreak())));
-        html.append(card("24h", formatNumber(analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofHours(24)))));
-        html.append(card("7d", formatNumber(analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(7)))));
+        appendCards(
+            html,
+            card("Matches", formatNumber(stats == null ? analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(3650)) : stats.matchesPlayed())),
+            card("Wins", formatNumber(stats == null ? 0 : stats.wins())),
+            card("Losses", formatNumber(stats == null ? 0 : stats.losses())),
+            card("Draws", formatNumber(stats == null ? 0 : stats.draws())),
+            card("Current Streak", formatNumber(stats == null ? 0 : stats.currentWinStreak())),
+            card("Best Streak", formatNumber(stats == null ? 0 : stats.bestWinStreak())),
+            card("24h", formatNumber(analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofHours(24)))),
+            card("7d", formatNumber(analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(7))))
+        );
         html.append("</div>");
 
         html.append("""
@@ -281,10 +287,13 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
                     <table>
                       <tbody>
             """);
-        html.append(row("Most Used Map", analyticsService.mostPlayedMapForPlayer(lookup.playerId())));
-        html.append(row("Most Used Ruleset", analyticsService.mostPlayedRulesForPlayer(lookup.playerId())));
-        html.append(row("Disconnect Losses", stats == null ? "0" : String.valueOf(stats.disconnectForfeitLosses())));
-        html.append(row("Recent Opponents", renderEntries(analyticsService.recentOpponents(lookup.playerId(), 5))));
+        appendRows(
+            html,
+            row("Most Used Map", analyticsService.mostPlayedMapForPlayer(lookup.playerId())),
+            row("Most Used Ruleset", analyticsService.mostPlayedRulesForPlayer(lookup.playerId())),
+            row("Disconnect Losses", stats == null ? "0" : String.valueOf(stats.disconnectForfeitLosses())),
+            row("Recent Opponents", renderEntries(analyticsService.recentOpponents(lookup.playerId(), 5)))
+        );
         html.append("""
                       </tbody>
                     </table>
@@ -334,9 +343,12 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
                 <h2>Arena / Map Usage</h2>
                 <div class="split">
             """);
-        html.append(renderUsageTable("Most Used Maps (30d)", analyticsService.topMapsSince(Duration.ofDays(30), 8)));
-        html.append(renderUsageTable("Most Used Rulesets (30d)", analyticsService.topRulesSince(Duration.ofDays(30), 8)));
-        html.append(renderUsageTable("End Reasons (30d)", analyticsService.topEndReasonsSince(Duration.ofDays(30), 8)));
+        appendRows(
+            html,
+            renderUsageTable("Most Used Maps (30d)", analyticsService.topMapsSince(Duration.ofDays(30), 8)),
+            renderUsageTable("Most Used Rulesets (30d)", analyticsService.topRulesSince(Duration.ofDays(30), 8)),
+            renderUsageTable("End Reasons (30d)", analyticsService.topEndReasonsSince(Duration.ofDays(30), 8))
+        );
         html.append("</div></div></div>");
     }
 
@@ -364,6 +376,18 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
         return """
             <div class="card"><div class="label">%s</div><div class="value">%s</div></div>
             """.formatted(escapeHtml(label), value);
+    }
+
+    private void appendCards(StringBuilder html, String... cards) {
+        for (String card : cards) {
+            html.append(card);
+        }
+    }
+
+    private void appendRows(StringBuilder html, String... rows) {
+        for (String row : rows) {
+            html.append(row);
+        }
     }
 
     private String row(String label, String value) {

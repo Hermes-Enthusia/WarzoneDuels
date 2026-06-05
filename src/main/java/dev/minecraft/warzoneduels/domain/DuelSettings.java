@@ -18,22 +18,22 @@ public final class DuelSettings {
     private String mapDisplayName = "Flat Arena";
     private String mapDescription = "Classic flat colosseum floor.";
     private boolean mapSupportsPlaceOnly = true;
-    private boolean mapSupportsBlockBreaking = false;
+    private boolean mapSupportsBlockBreaking;
     private boolean mapSupportsProtectedExplosives = true;
     private String mapSchematicFile = "";
-    private boolean mapPasteAir = false;
-    private boolean allowCrystalsAnchors = false;
-    private boolean allowExplosiveMinecarts = false;
-    private boolean allowOtherExplosives = false;
+    private boolean mapPasteAir;
+    private boolean allowCrystalsAnchors;
+    private boolean allowExplosiveMinecarts;
+    private boolean allowOtherExplosives;
     private boolean allowEnderPearls = true;
-    private int enderPearlCooldownSeconds = 0;
+    private int enderPearlCooldownSeconds;
     private boolean allowWindCharges = true;
-    private int windChargeCooldownSeconds = 0;
+    private int windChargeCooldownSeconds;
     private boolean allowMaces = true;
     private boolean allowChorusFruit = true;
     private boolean allowSpears = true;
     private boolean allowElytras = true;
-    private double wager = 0D;
+    private double wager;
 
     public String getMapId() {
         return mapId;

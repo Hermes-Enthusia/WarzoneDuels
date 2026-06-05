@@ -80,7 +80,7 @@ public final class DuelService {
     private final Map<UUID, BuilderSession> builders = new HashMap<>();
     private final Set<UUID> oneTimeTeleportAllowance = new HashSet<>();
     private final Set<UUID> allowedArenaItemEntityIds = new HashSet<>();
-    private final Map<BlockKey, Long> allowedArenaItemSpawnLocations = new HashMap<>();
+    private final Map<BlockKey, Long> allowedArenaItemSpawnLocations = new ConcurrentHashMap<>();
     private final Set<UUID> respawnToSpawn = new HashSet<>();
     private final Set<UUID> recoveryTeleportIds = new HashSet<>();
     private final Set<UUID> activeParticipantIndex = ConcurrentHashMap.newKeySet();
