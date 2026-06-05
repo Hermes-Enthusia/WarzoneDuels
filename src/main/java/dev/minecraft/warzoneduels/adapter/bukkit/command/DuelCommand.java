@@ -4,6 +4,7 @@ import dev.minecraft.warzoneduels.adapter.bukkit.spoils.SpoilsGuiFactory;
 import dev.minecraft.warzoneduels.adapter.bukkit.gui.DuelGui;
 import dev.minecraft.warzoneduels.app.DuelService;
 import dev.minecraft.warzoneduels.app.SpoilsService;
+import dev.minecraft.warzoneduels.domain.BuilderSession;
 import dev.minecraft.warzoneduels.domain.spoils.SpoilsEntry;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
@@ -50,95 +51,13 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
             case "vault" -> openSpoils(player);
             case "stats" -> player.performCommand(args.length >= 2 ? "stats " + args[1] : "stats");
             case "info", "settings" -> duelService.showSettings(player);
-            case "reload" -> {
-                if (!player.hasPermission("warzoneduels.admin")) {
-                    duelService.sendMessage(player, "messages.no-permission");
-                    return true;
-                }
-                duelService.reloadFromCommand(player);
-            }
-            case "restoreloadout" -> {
-                if (!player.hasPermission("warzoneduels.admin")) {
-                    duelService.sendMessage(player, "messages.no-permission");
-                    return true;
-                }
-                if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /duel restoreloadout <player>");
-                    return true;
-                }
-                Player target = player.getServer().getPlayer(args[1]);
-                if (target == null) {
-                    duelService.sendMessage(player, "messages.target-offline");
-                    return true;
-                }
-                duelService.restoreLatestLoadout(player, target);
-            }
-            case "mapsave" -> {
-                if (!player.hasPermission("warzoneduels.admin")) {
-                    duelService.sendMessage(player, "messages.no-permission");
-                    return true;
-                }
-                if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /duel mapsave <mapId>");
-                    return true;
-                }
-                duelService.saveMapSnapshot(player, args[1]);
-            }
-            case "mapload" -> {
-                if (!player.hasPermission("warzoneduels.admin")) {
-                    duelService.sendMessage(player, "messages.no-permission");
-                    return true;
-                }
-                if (args.length < 2) {
-                    player.sendMessage(ChatColor.RED + "Usage: /duel mapload <mapId>");
-                    return true;
-                }
-                duelService.loadMapSnapshot(player, args[1]);
-            }
-            case "mapstatus" -> {
-                if (!player.hasPermission("warzoneduels.admin")) {
-                    duelService.sendMessage(player, "messages.no-permission");
-                    return true;
-                }
-                duelService.showMapStatus(player);
-            }
-            case "setpos1", "setpos2", "setspawn1", "setspawn2", "setspectator", "setexit" -> {
-                if (!player.hasPermission("warzoneduels.admin")) {
-                    duelService.sendMessage(player, "messages.no-permission");
-                    return true;
-                }
-                Location location = player.getLocation();
-                if (args.length == 4) {
-                    try {
-                        location = new Location(
-                            player.getWorld(),
-                            Double.parseDouble(args[1]),
-                            Double.parseDouble(args[2]),
-                            Double.parseDouble(args[3])
-                        );
-                    } catch (NumberFormatException ex) {
-                        player.sendMessage(ChatColor.RED + "Invalid coordinates.");
-                        return true;
-                    }
-                }
-                duelService.updateArenaLocation(sub, location);
-                player.sendMessage(ChatColor.GREEN + "Updated " + sub + " to " + formatLocation(location));
-            }
-            default -> {
-                if (args.length != 1) {
-                    sendUsage(player);
-                    return true;
-                }
-                Player target = player.getServer().getPlayer(args[0]);
-                if (target == null || !target.isOnline()) {
-                    duelService.sendMessage(player, "messages.target-offline");
-                    return true;
-                }
-                duelService.startBuilder(player, target);
-                if (duelService.getBuilder(player.getUniqueId()) != null) {
-                    player.openInventory(DuelGui.buildMapGui(duelService.mapOptions(), duelService.getBuilder(player.getUniqueId()).settings()));
-                }
-            }
+            case "reload" -> handleReload(player);
+            case "restoreloadout" -> handleRestoreLoadout(player, args);
+            case "mapsave" -> handleMapSave(player, args);
+            case "mapload" -> handleMapLoad(player, args);
+            case "mapstatus" -> handleMapStatus(player);
+            case "setpos1", "setpos2", "setspawn1", "setspawn2", "setspectator", "setexit" -> handleArenaLocation(player, sub, args);
+            default -> handleTargetDuelStart(player, args);
         }
         return true;
     }
@@ -200,6 +119,112 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
 
     private String formatLocation(Location location) {
         return location.getBlockX() + "," + location.getBlockY() + "," + location.getBlockZ();
+    }
+
+    private void handleReload(Player player) {
+        if (!requireAdmin(player)) {
+            return;
+        }
+        duelService.reloadFromCommand(player);
+    }
+
+    private void handleRestoreLoadout(Player player, String[] args) {
+        if (!requireAdmin(player)) {
+            return;
+        }
+        if (args.length < 2) {
+            player.sendMessage(ChatColor.RED + "Usage: /duel restoreloadout <player>");
+            return;
+        }
+        Player target = player.getServer().getPlayer(args[1]);
+        if (target == null) {
+            duelService.sendMessage(player, "messages.target-offline");
+            return;
+        }
+        duelService.restoreLatestLoadout(player, target);
+    }
+
+    private void handleMapSave(Player player, String[] args) {
+        if (!requireAdmin(player)) {
+            return;
+        }
+        if (args.length < 2) {
+            player.sendMessage(ChatColor.RED + "Usage: /duel mapsave <mapId>");
+            return;
+        }
+        duelService.saveMapSnapshot(player, args[1]);
+    }
+
+    private void handleMapLoad(Player player, String[] args) {
+        if (!requireAdmin(player)) {
+            return;
+        }
+        if (args.length < 2) {
+            player.sendMessage(ChatColor.RED + "Usage: /duel mapload <mapId>");
+            return;
+        }
+        duelService.loadMapSnapshot(player, args[1]);
+    }
+
+    private void handleMapStatus(Player player) {
+        if (!requireAdmin(player)) {
+            return;
+        }
+        duelService.showMapStatus(player);
+    }
+
+    private void handleArenaLocation(Player player, String subcommand, String[] args) {
+        if (!requireAdmin(player)) {
+            return;
+        }
+        Location location = parseLocationArgument(player, args);
+        if (location == null) {
+            player.sendMessage(ChatColor.RED + "Invalid coordinates.");
+            return;
+        }
+        duelService.updateArenaLocation(subcommand, location);
+        player.sendMessage(ChatColor.GREEN + "Updated " + subcommand + " to " + formatLocation(location));
+    }
+
+    private Location parseLocationArgument(Player player, String[] args) {
+        if (args.length != 4) {
+            return player.getLocation();
+        }
+        try {
+            return new Location(
+                player.getWorld(),
+                Double.parseDouble(args[1]),
+                Double.parseDouble(args[2]),
+                Double.parseDouble(args[3])
+            );
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private void handleTargetDuelStart(Player player, String[] args) {
+        if (args.length != 1) {
+            sendUsage(player);
+            return;
+        }
+        Player target = player.getServer().getPlayer(args[0]);
+        if (target == null || !target.isOnline()) {
+            duelService.sendMessage(player, "messages.target-offline");
+            return;
+        }
+        duelService.startBuilder(player, target);
+        BuilderSession builder = duelService.getBuilder(player.getUniqueId());
+        if (builder != null) {
+            player.openInventory(DuelGui.buildMapGui(duelService.mapOptions(), builder.settings()));
+        }
+    }
+
+    private boolean requireAdmin(Player player) {
+        if (player.hasPermission("warzoneduels.admin")) {
+            return true;
+        }
+        duelService.sendMessage(player, "messages.no-permission");
+        return false;
     }
 
     private void openSpoils(Player player) {
