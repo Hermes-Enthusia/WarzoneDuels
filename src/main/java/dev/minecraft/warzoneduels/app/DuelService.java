@@ -54,6 +54,16 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class DuelService {
+    private static final Set<String> BUILT_IN_ALLOWED_DUEL_COMMANDS = Set.of(
+        "draw",
+        "surrender",
+        "duel draw",
+        "duel surrender",
+        "duel cancel",
+        "duel info",
+        "duel settings"
+    );
+
     private final WarzoneDuelsPlugin plugin;
     private final EconomyPort economyPort;
     private final SpawnPort spawnPort;
@@ -704,13 +714,7 @@ public final class DuelService {
 
     public boolean isAllowedCommandForParticipant(String rawCommand) {
         String normalized = rawCommand.toLowerCase(Locale.ROOT).replaceFirst("^/", "").trim();
-        if (normalized.equals("draw")
-            || normalized.equals("surrender")
-            || normalized.equals("duel draw")
-            || normalized.equals("duel surrender")
-            || normalized.equals("duel cancel")
-            || normalized.equals("duel info")
-            || normalized.equals("duel settings")) {
+        if (BUILT_IN_ALLOWED_DUEL_COMMANDS.contains(normalized)) {
             return true;
         }
         for (String allowed : allowedDuelCommands) {
@@ -1053,28 +1057,18 @@ public final class DuelService {
             return false;
         }
         DuelSettings settings = activeDuel.settings();
-        if (material == Material.ENDER_PEARL) {
-            return settings.isAllowEnderPearls() && !actor.hasCooldown(Material.ENDER_PEARL);
-        }
-        if (material == Material.WIND_CHARGE) {
-            return settings.isAllowWindCharges() && !actor.hasCooldown(Material.WIND_CHARGE);
-        }
-        if (material == Material.CHORUS_FRUIT) {
-            return settings.isAllowChorusFruit();
-        }
-        if (material == Material.MACE) {
-            return settings.isAllowMaces();
-        }
         if (SpearUtil.isSpear(material)) {
             return settings.isAllowSpears();
         }
-        if (material == Material.ELYTRA) {
-            return settings.isAllowElytras();
-        }
-        if (material == Material.BRUSH) {
-            return false;
-        }
-        return true;
+        return switch (material) {
+            case ENDER_PEARL -> settings.isAllowEnderPearls() && !actor.hasCooldown(Material.ENDER_PEARL);
+            case WIND_CHARGE -> settings.isAllowWindCharges() && !actor.hasCooldown(Material.WIND_CHARGE);
+            case CHORUS_FRUIT -> settings.isAllowChorusFruit();
+            case MACE -> settings.isAllowMaces();
+            case ELYTRA -> settings.isAllowElytras();
+            case BRUSH -> false;
+            default -> true;
+        };
     }
 
     public boolean isCombatItemEnabled(Material material, Player actor) {
@@ -1082,25 +1076,17 @@ public final class DuelService {
             return true;
         }
         DuelSettings settings = activeDuel.settings();
-        if (material == Material.ENDER_PEARL) {
-            return settings.isAllowEnderPearls();
-        }
-        if (material == Material.WIND_CHARGE) {
-            return settings.isAllowWindCharges();
-        }
-        if (material == Material.CHORUS_FRUIT) {
-            return settings.isAllowChorusFruit();
-        }
-        if (material == Material.MACE) {
-            return settings.isAllowMaces();
-        }
         if (SpearUtil.isSpear(material)) {
             return settings.isAllowSpears();
         }
-        if (material == Material.ELYTRA) {
-            return settings.isAllowElytras();
-        }
-        return true;
+        return switch (material) {
+            case ENDER_PEARL -> settings.isAllowEnderPearls();
+            case WIND_CHARGE -> settings.isAllowWindCharges();
+            case CHORUS_FRUIT -> settings.isAllowChorusFruit();
+            case MACE -> settings.isAllowMaces();
+            case ELYTRA -> settings.isAllowElytras();
+            default -> true;
+        };
     }
 
     public int combatCooldownSeconds(Material material, Player actor) {

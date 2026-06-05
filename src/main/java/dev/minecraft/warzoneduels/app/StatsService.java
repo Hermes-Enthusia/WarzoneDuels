@@ -64,16 +64,9 @@ public final class StatsService {
         if (name == null || name.isBlank()) {
             return null;
         }
-        String needle = name.toLowerCase(Locale.ROOT);
-        for (PlayerDuelStats stats : statsByPlayerId.values()) {
-            if (stats.lastKnownName() != null && stats.lastKnownName().equalsIgnoreCase(needle)) {
-                return stats;
-            }
-        }
-        for (PlayerDuelStats stats : statsByPlayerId.values()) {
-            if (stats.lastKnownName() != null && stats.lastKnownName().toLowerCase(Locale.ROOT).startsWith(needle)) {
-                return stats;
-            }
+        PlayerDuelStats existingStats = findExistingByName(name);
+        if (existingStats != null) {
+            return existingStats;
         }
         OfflinePlayer offlinePlayer = Bukkit.getOfflinePlayer(name);
         if (offlinePlayer != null && offlinePlayer.getUniqueId() != null) {
@@ -87,13 +80,21 @@ public final class StatsService {
             return null;
         }
         String needle = name.toLowerCase(Locale.ROOT);
+        PlayerDuelStats exactMatch = findByLastKnownName(needle, false);
+        return exactMatch == null ? findByLastKnownName(needle, true) : exactMatch;
+    }
+
+    private PlayerDuelStats findByLastKnownName(String needle, boolean prefixMatch) {
         for (PlayerDuelStats stats : statsByPlayerId.values()) {
-            if (stats.lastKnownName() != null && stats.lastKnownName().equalsIgnoreCase(needle)) {
+            String lastKnownName = stats.lastKnownName();
+            if (lastKnownName == null) {
+                continue;
+            }
+            String normalizedName = lastKnownName.toLowerCase(Locale.ROOT);
+            if (!prefixMatch && normalizedName.equals(needle)) {
                 return stats;
             }
-        }
-        for (PlayerDuelStats stats : statsByPlayerId.values()) {
-            if (stats.lastKnownName() != null && stats.lastKnownName().toLowerCase(Locale.ROOT).startsWith(needle)) {
+            if (prefixMatch && normalizedName.startsWith(needle)) {
                 return stats;
             }
         }
