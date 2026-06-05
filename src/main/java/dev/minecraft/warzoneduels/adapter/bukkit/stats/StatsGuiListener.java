@@ -8,8 +8,15 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 
 import java.util.List;
+import java.util.UUID;
 
 public final class StatsGuiListener implements Listener {
+    private static final int PAGE_SIZE = 21;
+    private static final int SLOT_PROFILE_LEADERBOARD = 40;
+    private static final int SLOT_CLOSE = 44;
+    private static final int SLOT_LEADERBOARD_PROFILE = 36;
+    private static final int SLOT_PREVIOUS_PAGE = 38;
+    private static final int SLOT_NEXT_PAGE = 42;
     private static final int[] LEADERBOARD_SLOTS = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34};
 
     private final StatsService statsService;
@@ -36,47 +43,59 @@ public final class StatsGuiListener implements Listener {
     }
 
     private void handleProfile(Player player, StatsGuiHolder holder, int slot) {
-        if (slot == 40) {
-            player.openInventory(StatsGuiFactory.buildLeaderboard(statsService.topByWins(0, 21), headCache, 0, holder.targetPlayerId()));
+        if (slot == SLOT_PROFILE_LEADERBOARD) {
+            player.openInventory(StatsGuiFactory.buildLeaderboard(statsService.topByWins(0, PAGE_SIZE), headCache, 0, holder.targetPlayerId()));
             return;
         }
-        if (slot == 44) {
+        if (slot == SLOT_CLOSE) {
             player.closeInventory();
         }
     }
 
     private void handleLeaderboard(Player player, StatsGuiHolder holder, int slot) {
         int page = holder.page();
-        if (slot == 36) {
-            PlayerDuelStats profileStats = holder.targetPlayerId() == null
-                ? statsService.stats(player.getUniqueId(), player.getName())
-                : statsService.findById(holder.targetPlayerId());
-            if (profileStats == null) {
-                profileStats = statsService.stats(player.getUniqueId(), player.getName());
-            }
-            player.openInventory(StatsGuiFactory.buildProfile(profileStats, headCache));
+        if (slot == SLOT_LEADERBOARD_PROFILE) {
+            openCurrentProfile(player, holder);
             return;
         }
-        if (slot == 38 && page > 0) {
-            player.openInventory(StatsGuiFactory.buildLeaderboard(statsService.topByWins(page - 1, 21), headCache, page - 1, holder.targetPlayerId()));
+        if (slot == SLOT_PREVIOUS_PAGE && page > 0) {
+            openLeaderboard(player, page - 1, holder.targetPlayerId());
             return;
         }
-        if (slot == 42) {
-            List<PlayerDuelStats> next = statsService.topByWins(page + 1, 21);
+        if (slot == SLOT_NEXT_PAGE) {
+            List<PlayerDuelStats> next = statsService.topByWins(page + 1, PAGE_SIZE);
             if (!next.isEmpty()) {
                 player.openInventory(StatsGuiFactory.buildLeaderboard(next, headCache, page + 1, holder.targetPlayerId()));
             }
             return;
         }
-        if (slot == 44) {
+        if (slot == SLOT_CLOSE) {
             player.closeInventory();
             return;
         }
+        openLeaderboardEntry(player, page, slot);
+    }
+
+    private void openCurrentProfile(Player player, StatsGuiHolder holder) {
+        PlayerDuelStats profileStats = holder.targetPlayerId() == null
+            ? statsService.stats(player.getUniqueId(), player.getName())
+            : statsService.findById(holder.targetPlayerId());
+        if (profileStats == null) {
+            profileStats = statsService.stats(player.getUniqueId(), player.getName());
+        }
+        player.openInventory(StatsGuiFactory.buildProfile(profileStats, headCache));
+    }
+
+    private void openLeaderboard(Player player, int page, UUID targetPlayerId) {
+        player.openInventory(StatsGuiFactory.buildLeaderboard(statsService.topByWins(page, PAGE_SIZE), headCache, page, targetPlayerId));
+    }
+
+    private void openLeaderboardEntry(Player player, int page, int slot) {
         for (int i = 0; i < LEADERBOARD_SLOTS.length; i++) {
             if (slot != LEADERBOARD_SLOTS[i]) {
                 continue;
             }
-            List<PlayerDuelStats> entries = statsService.topByWins(page, 21);
+            List<PlayerDuelStats> entries = statsService.topByWins(page, PAGE_SIZE);
             if (i >= entries.size()) {
                 return;
             }

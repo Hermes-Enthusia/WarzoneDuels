@@ -12,6 +12,16 @@ import java.util.List;
 import java.util.UUID;
 
 public final class SpoilsGuiListener implements Listener {
+    private static final int CONTENT_SLOTS = 45;
+    private static final int SLOT_OVERVIEW_PREVIOUS = 45;
+    private static final int SLOT_OVERVIEW_CLOSE = 49;
+    private static final int SLOT_OVERVIEW_NEXT = 53;
+    private static final int SLOT_DETAIL_BACK = 45;
+    private static final int SLOT_DETAIL_PREVIOUS = 46;
+    private static final int SLOT_DETAIL_NEXT = 47;
+    private static final int SLOT_DETAIL_CLAIM_ALL = 50;
+    private static final int SLOT_DETAIL_DELETE_REMAINING = 51;
+
     private final SpoilsService spoilsService;
 
     public SpoilsGuiListener(SpoilsService spoilsService) {
@@ -44,14 +54,12 @@ public final class SpoilsGuiListener implements Listener {
 
     private void handleOverviewClick(Player player, SpoilsOverviewHolder holder, int slot) {
         List<SpoilsEntry> entries = spoilsService.getEntriesFor(player.getUniqueId());
-        if (entries.isEmpty()) {
-            player.closeInventory();
-            spoilsService.sendNoSpoilsMessage(player);
+        if (closeIfNoEntries(player, entries)) {
             return;
         }
         int page = holder.page();
-        if (slot >= 0 && slot < 45) {
-            int index = (page * 45) + slot;
+        if (slot >= 0 && slot < CONTENT_SLOTS) {
+            int index = (page * CONTENT_SLOTS) + slot;
             if (index >= entries.size()) {
                 return;
             }
@@ -59,15 +67,15 @@ public final class SpoilsGuiListener implements Listener {
             player.openInventory(SpoilsGuiFactory.detail(player.getUniqueId(), entry, spoilsService, 0));
             return;
         }
-        if (slot == 45 && page > 0) {
+        if (slot == SLOT_OVERVIEW_PREVIOUS && page > 0) {
             player.openInventory(SpoilsGuiFactory.overview(player.getUniqueId(), entries, spoilsService, page - 1));
             return;
         }
-        if (slot == 53 && ((page + 1) * 45) < entries.size()) {
+        if (slot == SLOT_OVERVIEW_NEXT && hasNextPage(page, entries.size())) {
             player.openInventory(SpoilsGuiFactory.overview(player.getUniqueId(), entries, spoilsService, page + 1));
             return;
         }
-        if (slot == 49) {
+        if (slot == SLOT_OVERVIEW_CLOSE) {
             player.closeInventory();
         }
     }
@@ -75,38 +83,31 @@ public final class SpoilsGuiListener implements Listener {
     private void handleDetailClick(Player player, SpoilsDetailHolder holder, int slot) {
         SpoilsEntry entry = spoilsService.getEntry(holder.entryId());
         if (entry == null || entry.isEmpty()) {
-            List<SpoilsEntry> entries = spoilsService.getEntriesFor(player.getUniqueId());
-            if (entries.isEmpty()) {
-                player.closeInventory();
-                spoilsService.sendNoSpoilsMessage(player);
-                return;
-            }
-            player.openInventory(SpoilsGuiFactory.overview(player.getUniqueId(), entries, spoilsService, 0));
+            openOverviewOrClose(player);
             return;
         }
 
         int page = holder.page();
-        if (slot >= 0 && slot < 45) {
-            int index = (page * 45) + slot;
+        if (slot >= 0 && slot < CONTENT_SLOTS) {
+            int index = (page * CONTENT_SLOTS) + slot;
             if (spoilsService.claimSingleItem(player, holder.entryId(), index)) {
                 reopenAfterClaim(player, holder.entryId(), page);
             }
             return;
         }
-        if (slot == 45) {
-            List<SpoilsEntry> entries = spoilsService.getEntriesFor(player.getUniqueId());
-            player.openInventory(SpoilsGuiFactory.overview(player.getUniqueId(), entries, spoilsService, 0));
+        if (slot == SLOT_DETAIL_BACK) {
+            openOverviewOrClose(player);
             return;
         }
-        if (slot == 46 && page > 0) {
+        if (slot == SLOT_DETAIL_PREVIOUS && page > 0) {
             player.openInventory(SpoilsGuiFactory.detail(player.getUniqueId(), entry, spoilsService, page - 1));
             return;
         }
-        if (slot == 47 && ((page + 1) * 45) < entry.items().size()) {
+        if (slot == SLOT_DETAIL_NEXT && hasNextPage(page, entry.items().size())) {
             player.openInventory(SpoilsGuiFactory.detail(player.getUniqueId(), entry, spoilsService, page + 1));
             return;
         }
-        if (slot == 50) {
+        if (slot == SLOT_DETAIL_CLAIM_ALL) {
             int claimed = spoilsService.claimAll(player, holder.entryId());
             if (claimed <= 0) {
                 player.sendMessage(ChatColor.RED + "No items were claimed.");
@@ -114,15 +115,9 @@ public final class SpoilsGuiListener implements Listener {
             reopenAfterClaim(player, holder.entryId(), page);
             return;
         }
-        if (slot == 51) {
+        if (slot == SLOT_DETAIL_DELETE_REMAINING) {
             if (spoilsService.deleteRemaining(player, holder.entryId())) {
-                List<SpoilsEntry> entries = spoilsService.getEntriesFor(player.getUniqueId());
-                if (entries.isEmpty()) {
-                    player.closeInventory();
-                    spoilsService.sendNoSpoilsMessage(player);
-                    return;
-                }
-                player.openInventory(SpoilsGuiFactory.overview(player.getUniqueId(), entries, spoilsService, 0));
+                openOverviewOrClose(player);
             }
         }
     }
@@ -130,16 +125,30 @@ public final class SpoilsGuiListener implements Listener {
     private void reopenAfterClaim(Player player, UUID entryId, int page) {
         SpoilsEntry refreshed = spoilsService.getEntry(entryId);
         if (refreshed == null || refreshed.isEmpty()) {
-            List<SpoilsEntry> entries = spoilsService.getEntriesFor(player.getUniqueId());
-            if (entries.isEmpty()) {
-                player.closeInventory();
-                spoilsService.sendNoSpoilsMessage(player);
-                return;
-            }
-            player.openInventory(SpoilsGuiFactory.overview(player.getUniqueId(), entries, spoilsService, 0));
+            openOverviewOrClose(player);
             return;
         }
-        int newPage = Math.min(page, Math.max(0, (refreshed.items().size() - 1) / 45));
+        int newPage = Math.min(page, Math.max(0, (refreshed.items().size() - 1) / CONTENT_SLOTS));
         player.openInventory(SpoilsGuiFactory.detail(player.getUniqueId(), refreshed, spoilsService, newPage));
+    }
+
+    private boolean hasNextPage(int page, int itemCount) {
+        return ((page + 1) * CONTENT_SLOTS) < itemCount;
+    }
+
+    private void openOverviewOrClose(Player player) {
+        List<SpoilsEntry> entries = spoilsService.getEntriesFor(player.getUniqueId());
+        if (!closeIfNoEntries(player, entries)) {
+            player.openInventory(SpoilsGuiFactory.overview(player.getUniqueId(), entries, spoilsService, 0));
+        }
+    }
+
+    private boolean closeIfNoEntries(Player player, List<SpoilsEntry> entries) {
+        if (!entries.isEmpty()) {
+            return false;
+        }
+        player.closeInventory();
+        spoilsService.sendNoSpoilsMessage(player);
+        return true;
     }
 }

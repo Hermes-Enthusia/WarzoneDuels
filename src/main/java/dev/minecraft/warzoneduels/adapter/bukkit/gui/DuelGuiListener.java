@@ -21,6 +21,55 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 
 public final class DuelGuiListener implements Listener {
+    private static final int SLOT_ACTIVE_CLOSE = 44;
+    private static final int SLOT_MAP_CANCEL = 40;
+    private static final int SLOT_RULES_NONE = 20;
+    private static final int SLOT_RULES_PLACE_ONLY = 22;
+    private static final int SLOT_RULES_PLACE_BREAK = 24;
+    private static final int SLOT_RULES_BACK = 36;
+    private static final int SLOT_RULES_CANCEL = 44;
+    private static final int SLOT_PLACE_ONLY_COBWEB_UTILS = 20;
+    private static final int SLOT_PLACE_ONLY_ALL_BLOCKS = 24;
+    private static final int SLOT_PLACE_ONLY_BACK = 40;
+    private static final int SLOT_EXTRAS_CRYSTALS_ANCHORS = 20;
+    private static final int SLOT_EXTRAS_EXPLOSIVE_MINECARTS = 22;
+    private static final int SLOT_EXTRAS_OTHER_EXPLOSIVES = 24;
+    private static final int SLOT_EXTRAS_BACK = 36;
+    private static final int SLOT_EXTRAS_NEXT = 40;
+    private static final int SLOT_ITEM_ENDER_PEARL = 20;
+    private static final int SLOT_ITEM_WIND_CHARGE = 22;
+    private static final int SLOT_ITEM_MACE = 24;
+    private static final int SLOT_ITEM_CHORUS = 29;
+    private static final int SLOT_ITEM_SPEAR = 31;
+    private static final int SLOT_ITEM_ELYTRA = 33;
+    private static final int SLOT_ITEM_BACK = 45;
+    private static final int SLOT_ITEM_WAGER = 53;
+    private static final int SLOT_PREVIEW_DENY = 27;
+    private static final int SLOT_PREVIEW_ACCEPT = 31;
+    private static final int SLOT_PREVIEW_CLOSE = 35;
+    private static final int SLOT_WAGER_CUSTOM = 31;
+    private static final int SLOT_WAGER_CLEAR = 49;
+    private static final int SLOT_WAGER_BACK = 45;
+    private static final int SLOT_WAGER_CONFIRM = 53;
+    private static final int SLOT_CONFIRM_EDIT_MAP = 19;
+    private static final int SLOT_CONFIRM_EDIT_RULES = 21;
+    private static final int SLOT_CONFIRM_EDIT_ITEMS = 23;
+    private static final int SLOT_CONFIRM_EDIT_EXTRAS = 16;
+    private static final int SLOT_CONFIRM_EDIT_WAGER = 25;
+    private static final int SLOT_CONFIRM_BACK_TO_WAGER = 36;
+    private static final int SLOT_CONFIRM_SEND = 40;
+    private static final int SLOT_CONFIRM_CANCEL = 44;
+    private static final Map<Integer, Double> WAGER_DELTAS = Map.of(
+        9, 1D,
+        10, 10D,
+        11, 100D,
+        12, 1000D,
+        14, -1D,
+        15, -10D,
+        16, -100D,
+        17, -1000D
+    );
+
     private final DuelService duelService;
     private final Map<UUID, Boolean> awaitingWagerInput = new ConcurrentHashMap<>();
 
@@ -55,7 +104,7 @@ public final class DuelGuiListener implements Listener {
                 return;
             }
             case ACTIVE_SETTINGS -> {
-                if (event.getRawSlot() == 44) {
+                if (event.getRawSlot() == SLOT_ACTIVE_CLOSE) {
                     player.closeInventory();
                 }
                 return;
@@ -99,133 +148,159 @@ public final class DuelGuiListener implements Listener {
             player.openInventory(DuelGui.buildRulesGui(settings));
             return;
         }
-        if (slot == 40) {
+        if (slot == SLOT_MAP_CANCEL) {
             duelService.clearBuilder(player.getUniqueId());
             player.closeInventory();
         }
     }
 
     private void handleRules(int slot, Player player, DuelSettings settings) {
-        if (slot == 20) {
-            settings.setPlaceBreakMode(DuelSettings.PlaceBreakMode.NONE);
-            player.openInventory(DuelGui.buildItemRulesGui(settings));
-            return;
-        } else if (slot == 22) {
-            settings.setPlaceBreakMode(DuelSettings.PlaceBreakMode.PLACE_ONLY);
-            player.openInventory(DuelGui.buildPlaceOnlyGui());
-            return;
-        } else if (slot == 24) {
-            if (!settings.isMapSupportsBlockBreaking()) {
+        switch (slot) {
+            case SLOT_RULES_NONE -> {
+                settings.setPlaceBreakMode(DuelSettings.PlaceBreakMode.NONE);
+                player.openInventory(DuelGui.buildItemRulesGui(settings));
                 return;
             }
-            settings.setPlaceBreakMode(DuelSettings.PlaceBreakMode.PLACE_BREAK);
-            player.openInventory(DuelGui.buildExtrasGui(settings));
-            return;
-        } else if (slot == 36) {
-            player.openInventory(DuelGui.buildMapGui(duelService.mapOptions(), settings));
-            return;
-        } else if (slot == 44) {
-            duelService.clearBuilder(player.getUniqueId());
-            player.closeInventory();
-            return;
-        } else {
-            return;
+            case SLOT_RULES_PLACE_ONLY -> {
+                settings.setPlaceBreakMode(DuelSettings.PlaceBreakMode.PLACE_ONLY);
+                player.openInventory(DuelGui.buildPlaceOnlyGui());
+                return;
+            }
+            case SLOT_RULES_PLACE_BREAK -> {
+                if (!settings.isMapSupportsBlockBreaking()) {
+                    return;
+                }
+                settings.setPlaceBreakMode(DuelSettings.PlaceBreakMode.PLACE_BREAK);
+                player.openInventory(DuelGui.buildExtrasGui(settings));
+                return;
+            }
+            case SLOT_RULES_BACK -> player.openInventory(DuelGui.buildMapGui(duelService.mapOptions(), settings));
+            case SLOT_RULES_CANCEL -> {
+                duelService.clearBuilder(player.getUniqueId());
+                player.closeInventory();
+            }
+            default -> {
+            }
         }
     }
 
     private void handlePlaceOnly(int slot, Player player, DuelSettings settings, boolean returnToConfirm) {
-        if (slot == 20) {
-            settings.setPlaceOnlyMode(DuelSettings.PlaceOnlyMode.COBWEB_UTILS);
-            settings.clearExplosiveRules();
-            player.openInventory(DuelGui.buildItemRulesGui(settings, returnToConfirm));
-        } else if (slot == 24) {
-            settings.setPlaceOnlyMode(DuelSettings.PlaceOnlyMode.ALL_BLOCKS);
-            if (duelService.shouldShowExplosivesMenu(settings)) {
-                player.openInventory(DuelGui.buildExtrasGui(settings, returnToConfirm));
-            } else {
+        switch (slot) {
+            case SLOT_PLACE_ONLY_COBWEB_UTILS -> {
+                settings.setPlaceOnlyMode(DuelSettings.PlaceOnlyMode.COBWEB_UTILS);
+                settings.clearExplosiveRules();
                 player.openInventory(DuelGui.buildItemRulesGui(settings, returnToConfirm));
             }
-        } else if (slot == 40) {
-            player.openInventory(returnToConfirm ? DuelGui.buildConfirmGui(settings) : DuelGui.buildRulesGui(settings));
+            case SLOT_PLACE_ONLY_ALL_BLOCKS -> {
+                settings.setPlaceOnlyMode(DuelSettings.PlaceOnlyMode.ALL_BLOCKS);
+                player.openInventory(duelService.shouldShowExplosivesMenu(settings)
+                    ? DuelGui.buildExtrasGui(settings, returnToConfirm)
+                    : DuelGui.buildItemRulesGui(settings, returnToConfirm));
+            }
+            case SLOT_PLACE_ONLY_BACK -> player.openInventory(returnToConfirm ? DuelGui.buildConfirmGui(settings) : DuelGui.buildRulesGui(settings));
+            default -> {
+            }
         }
     }
 
     private void handleExtras(int slot, Player player, DuelSettings settings, boolean returnToConfirm) {
-        if (slot == 20) {
-            settings.setAllowCrystalsAnchors(!settings.isAllowCrystalsAnchors());
-            player.openInventory(DuelGui.buildExtrasGui(settings, returnToConfirm));
-        } else if (slot == 22) {
-            settings.setAllowExplosiveMinecarts(!settings.isAllowExplosiveMinecarts());
-            player.openInventory(DuelGui.buildExtrasGui(settings, returnToConfirm));
-        } else if (slot == 24) {
-            settings.setAllowOtherExplosives(!settings.isAllowOtherExplosives());
-            player.openInventory(DuelGui.buildExtrasGui(settings, returnToConfirm));
-        } else if (slot == 36) {
-            if (returnToConfirm) {
-                player.openInventory(DuelGui.buildConfirmGui(settings));
-            } else if (settings.getPlaceBreakMode() == DuelSettings.PlaceBreakMode.PLACE_BREAK) {
-                player.openInventory(DuelGui.buildRulesGui(settings));
-            } else {
-                player.openInventory(DuelGui.buildPlaceOnlyGui());
+        switch (slot) {
+            case SLOT_EXTRAS_CRYSTALS_ANCHORS -> {
+                settings.setAllowCrystalsAnchors(!settings.isAllowCrystalsAnchors());
+                player.openInventory(DuelGui.buildExtrasGui(settings, returnToConfirm));
             }
-        } else if (slot == 40) {
-            player.openInventory(returnToConfirm ? DuelGui.buildConfirmGui(settings) : DuelGui.buildItemRulesGui(settings));
+            case SLOT_EXTRAS_EXPLOSIVE_MINECARTS -> {
+                settings.setAllowExplosiveMinecarts(!settings.isAllowExplosiveMinecarts());
+                player.openInventory(DuelGui.buildExtrasGui(settings, returnToConfirm));
+            }
+            case SLOT_EXTRAS_OTHER_EXPLOSIVES -> {
+                settings.setAllowOtherExplosives(!settings.isAllowOtherExplosives());
+                player.openInventory(DuelGui.buildExtrasGui(settings, returnToConfirm));
+            }
+            case SLOT_EXTRAS_BACK -> openExtrasBack(player, settings, returnToConfirm);
+            case SLOT_EXTRAS_NEXT -> player.openInventory(returnToConfirm ? DuelGui.buildConfirmGui(settings) : DuelGui.buildItemRulesGui(settings));
+            default -> {
+            }
+        }
+    }
+
+    private void openExtrasBack(Player player, DuelSettings settings, boolean returnToConfirm) {
+        if (returnToConfirm) {
+            player.openInventory(DuelGui.buildConfirmGui(settings));
+        } else if (settings.getPlaceBreakMode() == DuelSettings.PlaceBreakMode.PLACE_BREAK) {
+            player.openInventory(DuelGui.buildRulesGui(settings));
+        } else {
+            player.openInventory(DuelGui.buildPlaceOnlyGui());
         }
     }
 
     private void handleItemRules(int slot, Player player, DuelSettings settings, ClickType click, boolean returnToConfirm) {
-        if (slot == 20) {
-            if (click.isRightClick()) {
-                settings.setEnderPearlCooldownSeconds(nextCooldown(settings.getEnderPearlCooldownSeconds()));
-            } else {
-                settings.setAllowEnderPearls(!settings.isAllowEnderPearls());
-            }
-        } else if (slot == 22) {
-            if (click.isRightClick()) {
-                settings.setWindChargeCooldownSeconds(nextCooldown(settings.getWindChargeCooldownSeconds()));
-            } else {
-                settings.setAllowWindCharges(!settings.isAllowWindCharges());
-            }
-        } else if (slot == 24) {
-            settings.setAllowMaces(!settings.isAllowMaces());
-        } else if (slot == 29) {
-            settings.setAllowChorusFruit(!settings.isAllowChorusFruit());
-        } else if (slot == 31) {
-            settings.setAllowSpears(!settings.isAllowSpears());
-        } else if (slot == 33) {
-            settings.setAllowElytras(!settings.isAllowElytras());
-        } else if (slot == 45) {
-            if (returnToConfirm) {
-                player.openInventory(DuelGui.buildConfirmGui(settings));
-            } else if (duelService.shouldShowExplosivesMenu(settings)) {
-                player.openInventory(DuelGui.buildExtrasGui(settings));
-            } else {
-                player.openInventory(settings.getPlaceBreakMode() == DuelSettings.PlaceBreakMode.NONE
-                    ? DuelGui.buildRulesGui(settings)
-                    : DuelGui.buildPlaceOnlyGui());
-            }
-            return;
-        } else if (slot == 53) {
-            player.openInventory(DuelGui.buildWagerGui(settings, duelService.maxWager(), returnToConfirm));
-            return;
-        } else {
+        if (toggleItemRule(slot, settings, click)) {
+            player.openInventory(DuelGui.buildItemRulesGui(settings, returnToConfirm));
             return;
         }
-        player.openInventory(DuelGui.buildItemRulesGui(settings, returnToConfirm));
+        if (slot == SLOT_ITEM_BACK) {
+            openItemRulesBack(player, settings, returnToConfirm);
+            return;
+        }
+        if (slot == SLOT_ITEM_WAGER) {
+            player.openInventory(DuelGui.buildWagerGui(settings, duelService.maxWager(), returnToConfirm));
+        }
+    }
+
+    private boolean toggleItemRule(int slot, DuelSettings settings, ClickType click) {
+        switch (slot) {
+            case SLOT_ITEM_ENDER_PEARL -> {
+                if (click.isRightClick()) {
+                    settings.setEnderPearlCooldownSeconds(nextCooldown(settings.getEnderPearlCooldownSeconds()));
+                } else {
+                    settings.setAllowEnderPearls(!settings.isAllowEnderPearls());
+                }
+                return true;
+            }
+            case SLOT_ITEM_WIND_CHARGE -> {
+                if (click.isRightClick()) {
+                    settings.setWindChargeCooldownSeconds(nextCooldown(settings.getWindChargeCooldownSeconds()));
+                } else {
+                    settings.setAllowWindCharges(!settings.isAllowWindCharges());
+                }
+                return true;
+            }
+            case SLOT_ITEM_MACE -> settings.setAllowMaces(!settings.isAllowMaces());
+            case SLOT_ITEM_CHORUS -> settings.setAllowChorusFruit(!settings.isAllowChorusFruit());
+            case SLOT_ITEM_SPEAR -> settings.setAllowSpears(!settings.isAllowSpears());
+            case SLOT_ITEM_ELYTRA -> settings.setAllowElytras(!settings.isAllowElytras());
+            default -> {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void openItemRulesBack(Player player, DuelSettings settings, boolean returnToConfirm) {
+        if (returnToConfirm) {
+            player.openInventory(DuelGui.buildConfirmGui(settings));
+        } else if (duelService.shouldShowExplosivesMenu(settings)) {
+            player.openInventory(DuelGui.buildExtrasGui(settings));
+        } else {
+            player.openInventory(settings.getPlaceBreakMode() == DuelSettings.PlaceBreakMode.NONE
+                ? DuelGui.buildRulesGui(settings)
+                : DuelGui.buildPlaceOnlyGui());
+        }
     }
 
     private void handleRequestPreview(int slot, Player player) {
-        if (slot == 31) {
+        if (slot == SLOT_PREVIEW_ACCEPT) {
             duelService.confirmAcceptRequest(player);
             player.closeInventory();
             return;
         }
-        if (slot == 27) {
+        if (slot == SLOT_PREVIEW_DENY) {
             duelService.denyRequest(player);
             player.closeInventory();
             return;
         }
-        if (slot == 35) {
+        if (slot == SLOT_PREVIEW_CLOSE) {
             player.closeInventory();
         }
     }
@@ -241,41 +316,34 @@ public final class DuelGuiListener implements Listener {
     }
 
     private void handleWager(int slot, Player player, DuelSettings settings, boolean returnToConfirm) {
-        double wager = settings.getWager();
-        if (slot == 9) {
-            wager += 1;
-        } else if (slot == 10) {
-            wager += 10;
-        } else if (slot == 11) {
-            wager += 100;
-        } else if (slot == 12) {
-            wager += 1000;
-        } else if (slot == 14) {
-            wager -= 1;
-        } else if (slot == 15) {
-            wager -= 10;
-        } else if (slot == 16) {
-            wager -= 100;
-        } else if (slot == 17) {
-            wager -= 1000;
-        } else if (slot == 53) {
-            player.openInventory(returnToConfirm ? DuelGui.buildConfirmGui(settings) : DuelGui.buildConfirmGui(settings));
+        Double delta = WAGER_DELTAS.get(slot);
+        if (delta != null) {
+            settings.setWager(clampWager(settings.getWager() + delta));
+            player.openInventory(DuelGui.buildWagerGui(settings, duelService.maxWager(), returnToConfirm));
             return;
-        } else if (slot == 45) {
+        }
+        if (slot == SLOT_WAGER_CONFIRM) {
+            player.openInventory(DuelGui.buildConfirmGui(settings));
+            return;
+        }
+        if (slot == SLOT_WAGER_BACK) {
             player.openInventory(returnToConfirm ? DuelGui.buildConfirmGui(settings) : DuelGui.buildItemRulesGui(settings));
             return;
-        } else if (slot == 49) {
-            wager = 0;
-        } else if (slot == 31) {
+        }
+        if (slot == SLOT_WAGER_CLEAR) {
+            settings.setWager(0D);
+            player.openInventory(DuelGui.buildWagerGui(settings, duelService.maxWager(), returnToConfirm));
+            return;
+        }
+        if (slot == SLOT_WAGER_CUSTOM) {
             awaitingWagerInput.put(player.getUniqueId(), returnToConfirm);
             player.closeInventory();
             player.sendMessage(ChatColor.GOLD + "[Duel] " + ChatColor.YELLOW + "Type a custom wager amount in chat. Type " + ChatColor.AQUA + "cancel" + ChatColor.YELLOW + " to back out.");
-            return;
-        } else {
-            return;
         }
-        settings.setWager(Math.max(0D, Math.min(duelService.maxWager(), wager)));
-        player.openInventory(DuelGui.buildWagerGui(settings, duelService.maxWager(), returnToConfirm));
+    }
+
+    private double clampWager(double wager) {
+        return Math.max(0D, Math.min(duelService.maxWager(), wager));
     }
 
     private void applyCustomWager(Player player, String input) {
@@ -300,33 +368,34 @@ public final class DuelGuiListener implements Listener {
             player.openInventory(DuelGui.buildWagerGui(settings, duelService.maxWager(), returnToConfirm));
             return;
         }
-        settings.setWager(Math.max(0D, Math.min(duelService.maxWager(), wager)));
+        settings.setWager(clampWager(wager));
         player.sendMessage(ChatColor.GOLD + "[Duel] " + ChatColor.GREEN + "Wager set to $" + DuelGui.formatAmount(settings.getWager()) + ".");
         player.openInventory(DuelGui.buildWagerGui(settings, duelService.maxWager(), returnToConfirm));
     }
 
     private void handleConfirm(int slot, Player player, DuelSettings settings) {
-        if (slot == 19) {
-            player.openInventory(DuelGui.buildMapGui(duelService.mapOptions(), settings));
-        } else if (slot == 21) {
-            player.openInventory(DuelGui.buildRulesGui(settings));
-        } else if (slot == 23) {
-            player.openInventory(DuelGui.buildItemRulesGui(settings, true));
-        } else if (slot == 16) {
-            if (duelService.shouldShowExplosivesMenu(settings)) {
-                player.openInventory(DuelGui.buildExtrasGui(settings, true));
+        switch (slot) {
+            case SLOT_CONFIRM_EDIT_MAP -> player.openInventory(DuelGui.buildMapGui(duelService.mapOptions(), settings));
+            case SLOT_CONFIRM_EDIT_RULES -> player.openInventory(DuelGui.buildRulesGui(settings));
+            case SLOT_CONFIRM_EDIT_ITEMS -> player.openInventory(DuelGui.buildItemRulesGui(settings, true));
+            case SLOT_CONFIRM_EDIT_EXTRAS -> {
+                if (duelService.shouldShowExplosivesMenu(settings)) {
+                    player.openInventory(DuelGui.buildExtrasGui(settings, true));
+                }
             }
-        } else if (slot == 25) {
-            player.openInventory(DuelGui.buildWagerGui(settings, duelService.maxWager(), true));
-        } else if (slot == 36) {
-            player.openInventory(DuelGui.buildWagerGui(settings, duelService.maxWager()));
-        } else if (slot == 40) {
-            duelService.sanitizeBuilderSettings(settings);
-            duelService.sendRequest(player);
-            player.closeInventory();
-        } else if (slot == 44) {
-            duelService.clearBuilder(player.getUniqueId());
-            player.closeInventory();
+            case SLOT_CONFIRM_EDIT_WAGER -> player.openInventory(DuelGui.buildWagerGui(settings, duelService.maxWager(), true));
+            case SLOT_CONFIRM_BACK_TO_WAGER -> player.openInventory(DuelGui.buildWagerGui(settings, duelService.maxWager()));
+            case SLOT_CONFIRM_SEND -> {
+                duelService.sanitizeBuilderSettings(settings);
+                duelService.sendRequest(player);
+                player.closeInventory();
+            }
+            case SLOT_CONFIRM_CANCEL -> {
+                duelService.clearBuilder(player.getUniqueId());
+                player.closeInventory();
+            }
+            default -> {
+            }
         }
     }
 }

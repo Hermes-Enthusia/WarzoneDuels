@@ -17,6 +17,8 @@ import java.util.Locale;
 
 public final class DuelGui {
     private static final int[] MAP_SLOTS = {20, 22, 24};
+    private static final String STATUS_ALLOWED = "Allowed";
+    private static final String STATUS_BLOCKED = "Blocked";
 
     private DuelGui() {
     }
@@ -458,7 +460,7 @@ public final class DuelGui {
     ) {
         List<String> lore = new ArrayList<>(description);
         lore.add("");
-        lore.add(ChatColor.GRAY + "Status: " + (enabled ? ChatColor.GREEN + "Allowed" : ChatColor.RED + "Blocked"));
+        lore.add(ChatColor.GRAY + "Status: " + ruleState(enabled));
         if (supportsCooldown) {
             lore.add(ChatColor.GRAY + "Cooldown: " + ChatColor.AQUA + cooldownSeconds + "s");
             lore.add("");
@@ -513,21 +515,21 @@ public final class DuelGui {
     }
 
     private static String ruleState(boolean enabled) {
-        return enabled ? ChatColor.GREEN + "Allowed" : ChatColor.RED + "Blocked";
+        return enabled ? ChatColor.GREEN + STATUS_ALLOWED : ChatColor.RED + STATUS_BLOCKED;
     }
 
     private static String ruleState(boolean enabled, int cooldownSeconds) {
         if (!enabled) {
-            return ChatColor.RED + "Blocked";
+            return ChatColor.RED + STATUS_BLOCKED;
         }
         if (cooldownSeconds <= 0) {
-            return ChatColor.GREEN + "Allowed";
+            return ChatColor.GREEN + STATUS_ALLOWED;
         }
-        return ChatColor.GREEN + "Allowed" + ChatColor.DARK_GRAY + " (" + cooldownSeconds + "s)";
+        return ChatColor.GREEN + STATUS_ALLOWED + ChatColor.DARK_GRAY + " (" + cooldownSeconds + "s)";
     }
 
     private static String boolState(boolean enabled) {
-        return enabled ? ChatColor.GREEN + "Enabled" : ChatColor.RED + "Blocked";
+        return enabled ? ChatColor.GREEN + "Enabled" : ChatColor.RED + STATUS_BLOCKED;
     }
 
     private static String section(String text) {
@@ -552,7 +554,7 @@ public final class DuelGui {
             case PLACE_ONLY -> settings.getPlaceOnlyMode() == DuelSettings.PlaceOnlyMode.COBWEB_UTILS
                 ? ChatColor.YELLOW + "Limited - Utilities"
                 : ChatColor.YELLOW + "Limited";
-            case PLACE_BREAK -> ChatColor.GREEN + "Allowed";
+            case PLACE_BREAK -> ChatColor.GREEN + STATUS_ALLOWED;
         };
     }
 
@@ -562,18 +564,18 @@ public final class DuelGui {
             case PLACE_ONLY -> settings.getPlaceOnlyMode() == DuelSettings.PlaceOnlyMode.COBWEB_UTILS
                 ? ChatColor.YELLOW + "Limited - Placed Utilities"
                 : ChatColor.YELLOW + "Limited - Placed Blocks";
-            case PLACE_BREAK -> ChatColor.GREEN + "Allowed";
+            case PLACE_BREAK -> ChatColor.GREEN + STATUS_ALLOWED;
         };
     }
 
     private static String cooldownRuleState(boolean enabled, int cooldownSeconds) {
         if (!enabled) {
-            return ChatColor.RED + "Blocked";
+            return ChatColor.RED + STATUS_BLOCKED;
         }
         if (cooldownSeconds > 0) {
-            return ChatColor.AQUA + String.valueOf(cooldownSeconds) + ChatColor.GRAY + " second cooldown";
+            return ChatColor.AQUA.toString() + cooldownSeconds + ChatColor.GRAY + " second cooldown";
         }
-        return ChatColor.GREEN + "Allowed";
+        return ChatColor.GREEN + STATUS_ALLOWED;
     }
 
     private static String blockRuleSummary(DuelSettings settings) {
