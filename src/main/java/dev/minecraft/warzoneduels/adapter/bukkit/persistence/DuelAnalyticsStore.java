@@ -16,7 +16,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 public final class DuelAnalyticsStore {
@@ -69,7 +68,7 @@ public final class DuelAnalyticsStore {
         if (connection == null || record == null) {
             return;
         }
-        String sql = """
+        try (PreparedStatement statement = connection.prepareStatement("""
             INSERT INTO duel_records (
                 reference, started_at, ended_at, duration_ms,
                 player_one_id, player_one_name, player_two_id, player_two_name,
@@ -77,8 +76,7 @@ public final class DuelAnalyticsStore {
                 map_id, map_name, ruleset, item_rules,
                 end_reason, counted_as_match, spectator_count, wager
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            """)) {
             statement.setString(1, record.reference());
             statement.setLong(2, record.startedAtEpochMs());
             statement.setLong(3, record.endedAtEpochMs());
@@ -106,90 +104,182 @@ public final class DuelAnalyticsStore {
     }
 
     public synchronized long countAll() {
-        return queryLong("SELECT COUNT(*) FROM duel_records");
+        if (connection == null) {
+            return 0L;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM duel_records")) {
+            return readLong(statement);
+        } catch (SQLException ex) {
+            plugin.getLogger().warning("Failed to query duel analytics: " + ex.getMessage());
+            return 0L;
+        }
     }
 
     public synchronized long countSince(long sinceEpochMs) {
-        return queryLong("SELECT COUNT(*) FROM duel_records WHERE ended_at >= ?", sinceEpochMs);
+        if (connection == null) {
+            return 0L;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM duel_records WHERE ended_at >= ?")) {
+            statement.setLong(1, sinceEpochMs);
+            return readLong(statement);
+        } catch (SQLException ex) {
+            plugin.getLogger().warning("Failed to query duel analytics: " + ex.getMessage());
+            return 0L;
+        }
     }
 
     public synchronized long countForPlayerSince(UUID playerId, long sinceEpochMs) {
-        String sql = """
+        if (connection == null) {
+            return 0L;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
             SELECT COUNT(*) FROM duel_records
             WHERE ended_at >= ? AND (player_one_id = ? OR player_two_id = ?)
-            """;
-        return queryLong(sql, sinceEpochMs, toString(playerId), toString(playerId));
+            """)) {
+            statement.setLong(1, sinceEpochMs);
+            statement.setString(2, toString(playerId));
+            statement.setString(3, toString(playerId));
+            return readLong(statement);
+        } catch (SQLException ex) {
+            plugin.getLogger().warning("Failed to query duel analytics: " + ex.getMessage());
+            return 0L;
+        }
     }
 
     public synchronized List<DuelRecord> findRecent(int limit) {
-        String sql = """
+        List<DuelRecord> results = new ArrayList<>();
+        if (connection == null) {
+            return results;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
             SELECT * FROM duel_records
             ORDER BY ended_at DESC
             LIMIT ?
-            """;
-        return queryRecords(sql, limit);
+            """)) {
+            statement.setInt(1, limit);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    results.add(readRecord(resultSet));
+                }
+            }
+        } catch (SQLException ex) {
+            plugin.getLogger().warning("Failed to query duel analytics: " + ex.getMessage());
+        }
+        return results;
     }
 
     public synchronized List<DuelRecord> findRecentForPlayer(UUID playerId, int limit) {
-        String sql = """
+        List<DuelRecord> results = new ArrayList<>();
+        if (connection == null) {
+            return results;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
             SELECT * FROM duel_records
             WHERE player_one_id = ? OR player_two_id = ?
             ORDER BY ended_at DESC
             LIMIT ?
-            """;
-        return queryRecords(sql, toString(playerId), toString(playerId), limit);
+            """)) {
+            statement.setString(1, toString(playerId));
+            statement.setString(2, toString(playerId));
+            statement.setInt(3, limit);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    results.add(readRecord(resultSet));
+                }
+            }
+        } catch (SQLException ex) {
+            plugin.getLogger().warning("Failed to query duel analytics: " + ex.getMessage());
+        }
+        return results;
     }
 
     public synchronized List<Map.Entry<String, Long>> topMapsSince(long sinceEpochMs, int limit) {
-        String sql = """
+        List<Map.Entry<String, Long>> results = new ArrayList<>();
+        if (connection == null) {
+            return results;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
             SELECT map_name, COUNT(*) AS total
             FROM duel_records
             WHERE ended_at >= ?
             GROUP BY map_name
             ORDER BY total DESC, map_name ASC
             LIMIT ?
-            """;
-        return queryEntries(sql, sinceEpochMs, limit);
+            """)) {
+            statement.setLong(1, sinceEpochMs);
+            statement.setInt(2, limit);
+            readEntries(statement, results);
+        } catch (SQLException ex) {
+            plugin.getLogger().warning("Failed to query duel analytics: " + ex.getMessage());
+        }
+        return results;
     }
 
     public synchronized List<Map.Entry<String, Long>> topRulesSince(long sinceEpochMs, int limit) {
-        String sql = """
+        List<Map.Entry<String, Long>> results = new ArrayList<>();
+        if (connection == null) {
+            return results;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
             SELECT ruleset, COUNT(*) AS total
             FROM duel_records
             WHERE ended_at >= ?
             GROUP BY ruleset
             ORDER BY total DESC, ruleset ASC
             LIMIT ?
-            """;
-        return queryEntries(sql, sinceEpochMs, limit);
+            """)) {
+            statement.setLong(1, sinceEpochMs);
+            statement.setInt(2, limit);
+            readEntries(statement, results);
+        } catch (SQLException ex) {
+            plugin.getLogger().warning("Failed to query duel analytics: " + ex.getMessage());
+        }
+        return results;
     }
 
     public synchronized List<Map.Entry<String, Long>> topEndReasonsSince(long sinceEpochMs, int limit) {
-        String sql = """
+        List<Map.Entry<String, Long>> results = new ArrayList<>();
+        if (connection == null) {
+            return results;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
             SELECT end_reason, COUNT(*) AS total
             FROM duel_records
             WHERE ended_at >= ?
             GROUP BY end_reason
             ORDER BY total DESC, end_reason ASC
             LIMIT ?
-            """;
-        return queryEntries(sql, sinceEpochMs, limit);
+            """)) {
+            statement.setLong(1, sinceEpochMs);
+            statement.setInt(2, limit);
+            readEntries(statement, results);
+        } catch (SQLException ex) {
+            plugin.getLogger().warning("Failed to query duel analytics: " + ex.getMessage());
+        }
+        return results;
     }
 
     public synchronized long countCancelledSince(long sinceEpochMs) {
-        String sql = """
+        if (connection == null) {
+            return 0L;
+        }
+        try (PreparedStatement statement = connection.prepareStatement("""
             SELECT COUNT(*) FROM duel_records
             WHERE ended_at >= ? AND counted_as_match = false
-            """;
-        return queryLong(sql, sinceEpochMs);
+            """)) {
+            statement.setLong(1, sinceEpochMs);
+            return readLong(statement);
+        } catch (SQLException ex) {
+            plugin.getLogger().warning("Failed to query duel analytics: " + ex.getMessage());
+            return 0L;
+        }
     }
 
     public synchronized void cleanupOlderThan(long cutoffEpochMs) {
         if (connection == null) {
             return;
         }
-        String sql = "DELETE FROM duel_records WHERE ended_at < ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (PreparedStatement statement = connection.prepareStatement("DELETE FROM duel_records WHERE ended_at < ?")) {
             statement.setLong(1, cutoffEpochMs);
             statement.executeUpdate();
         } catch (SQLException ex) {
@@ -233,55 +323,18 @@ public final class DuelAnalyticsStore {
         }
     }
 
-    private long queryLong(String sql, Object... params) {
-        if (connection == null) {
-            return 0L;
-        }
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            bind(statement, params);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                return resultSet.next() ? resultSet.getLong(1) : 0L;
-            }
-        } catch (SQLException ex) {
-            plugin.getLogger().warning("Failed to query duel analytics: " + ex.getMessage());
-            return 0L;
+    private long readLong(PreparedStatement statement) throws SQLException {
+        try (ResultSet resultSet = statement.executeQuery()) {
+            return resultSet.next() ? resultSet.getLong(1) : 0L;
         }
     }
 
-    private List<Map.Entry<String, Long>> queryEntries(String sql, Object... params) {
-        List<Map.Entry<String, Long>> results = new ArrayList<>();
-        if (connection == null) {
-            return results;
-        }
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            bind(statement, params);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    results.add(Map.entry(resultSet.getString(1), resultSet.getLong(2)));
-                }
+    private void readEntries(PreparedStatement statement, List<Map.Entry<String, Long>> results) throws SQLException {
+        try (ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                results.add(Map.entry(resultSet.getString(1), resultSet.getLong(2)));
             }
-        } catch (SQLException ex) {
-            plugin.getLogger().warning("Failed to query duel analytics: " + ex.getMessage());
         }
-        return results;
-    }
-
-    private List<DuelRecord> queryRecords(String sql, Object... params) {
-        List<DuelRecord> results = new ArrayList<>();
-        if (connection == null) {
-            return results;
-        }
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            bind(statement, params);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                while (resultSet.next()) {
-                    results.add(readRecord(resultSet));
-                }
-            }
-        } catch (SQLException ex) {
-            plugin.getLogger().warning("Failed to query duel analytics: " + ex.getMessage());
-        }
-        return results;
     }
 
     private DuelRecord readRecord(ResultSet resultSet) throws SQLException {
@@ -307,30 +360,6 @@ public final class DuelAnalyticsStore {
             resultSet.getInt("spectator_count"),
             resultSet.getDouble("wager")
         );
-    }
-
-    private void bind(PreparedStatement statement, Object... params) throws SQLException {
-        for (int i = 0; i < params.length; i++) {
-            Object value = params[i];
-            int index = i + 1;
-            if (value == null) {
-                statement.setObject(index, null);
-                continue;
-            }
-            if (value instanceof Integer integer) {
-                statement.setInt(index, integer);
-            } else if (value instanceof Long longValue) {
-                statement.setLong(index, longValue);
-            } else if (value instanceof Double doubleValue) {
-                statement.setDouble(index, doubleValue);
-            } else if (value instanceof Boolean boolValue) {
-                statement.setBoolean(index, boolValue);
-            } else if (value instanceof UUID uuid) {
-                statement.setString(index, uuid.toString());
-            } else {
-                statement.setString(index, value.toString());
-            }
-        }
     }
 
     private static String toString(UUID uuid) {

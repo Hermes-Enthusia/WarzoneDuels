@@ -51,15 +51,15 @@ import org.bukkit.event.block.Action;
 import org.bukkit.inventory.EquipmentSlot;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class DuelListener implements Listener {
     private final DuelService duelService;
-    private final Map<UUID, List<org.bukkit.block.Block>> vanillaEntityExplosionBlocks = new HashMap<>();
-    private final Map<String, List<org.bukkit.block.Block>> vanillaBlockExplosionBlocks = new HashMap<>();
+    private final Map<UUID, List<org.bukkit.block.Block>> vanillaEntityExplosionBlocks = new ConcurrentHashMap<>();
+    private final Map<String, List<org.bukkit.block.Block>> vanillaBlockExplosionBlocks = new ConcurrentHashMap<>();
 
     public DuelListener(DuelService duelService) {
         this.duelService = duelService;
@@ -311,20 +311,21 @@ public final class DuelListener implements Listener {
         if (!duelService.isInActiveDuel(player.getUniqueId())) {
             return;
         }
-        Material launchedType = switch (event.getEntity().getType().name()) {
-            case "ENDER_PEARL" -> Material.ENDER_PEARL;
-            case "WIND_CHARGE" -> Material.WIND_CHARGE;
-            default -> null;
-        };
-        if (launchedType != null) {
-            if (!duelService.isCombatItemEnabled(launchedType, player)) {
-                event.setCancelled(true);
-                duelService.sendBlockedCombatItemMessage(player);
-                return;
+        switch (event.getEntity().getType().name()) {
+            case "ENDER_PEARL" -> handleLaunchedCombatItem(event, player, Material.ENDER_PEARL);
+            case "WIND_CHARGE" -> handleLaunchedCombatItem(event, player, Material.WIND_CHARGE);
+            default -> {
             }
-            if (!duelService.canUseCombatItem(launchedType, player)) {
-                return;
-            }
+        }
+    }
+
+    private void handleLaunchedCombatItem(ProjectileLaunchEvent event, Player player, Material launchedType) {
+        if (!duelService.isCombatItemEnabled(launchedType, player)) {
+            event.setCancelled(true);
+            duelService.sendBlockedCombatItemMessage(player);
+            return;
+        }
+        if (duelService.canUseCombatItem(launchedType, player)) {
             duelService.applyCombatCooldownDeferred(launchedType, player);
         }
     }
