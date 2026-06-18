@@ -42,6 +42,7 @@ public final class DuelGuiListener implements Listener {
     private static final int SLOT_ITEM_CHORUS = 29;
     private static final int SLOT_ITEM_SPEAR = 31;
     private static final int SLOT_ITEM_ELYTRA = 33;
+    private static final int SLOT_ITEM_ENDER_CHEST = 40;
     private static final int SLOT_ITEM_BACK = 45;
     private static final int SLOT_ITEM_WAGER = 53;
     private static final int SLOT_PREVIEW_DENY = 27;
@@ -270,6 +271,7 @@ public final class DuelGuiListener implements Listener {
             case SLOT_ITEM_CHORUS -> settings.setAllowChorusFruit(!settings.isAllowChorusFruit());
             case SLOT_ITEM_SPEAR -> settings.setAllowSpears(!settings.isAllowSpears());
             case SLOT_ITEM_ELYTRA -> settings.setAllowElytras(!settings.isAllowElytras());
+            case SLOT_ITEM_ENDER_CHEST -> settings.setAllowEnderChests(!settings.isAllowEnderChests());
             default -> {
                 return false;
             }

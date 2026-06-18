@@ -48,6 +48,7 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
             case "deny" -> duelService.denyRequest(player);
             case "draw", "surrender", "cancel" -> duelService.requestDraw(player);
             case "review" -> openPendingRequestReview(player);
+            case "watch", "spectate", "stands" -> duelService.watchDuel(player);
             case "vault" -> openSpoils(player);
             case "stats" -> player.performCommand(args.length >= 2 ? "stats " + args[1] : "stats");
             case "info", "settings" -> duelService.showSettings(player);
@@ -111,7 +112,7 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendUsage(Player player) {
-        player.sendMessage(ChatColor.YELLOW + "Usage: /duel <player|accept|deny|review|draw|surrender|cancel|vault|stats|info|settings>");
+        player.sendMessage(ChatColor.YELLOW + "Usage: /duel <player|accept|deny|review|watch|draw|surrender|cancel|vault|stats|info|settings>");
         if (player.hasPermission("warzoneduels.admin")) {
             player.sendMessage(ChatColor.GRAY + "Admin: /duel <mapsave|mapload|mapstatus|reload|restoreloadout|setpos1|setpos2|setspawn1|setspawn2|setspectator|setexit>");
         }

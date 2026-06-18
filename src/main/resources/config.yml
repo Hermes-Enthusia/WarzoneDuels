@@ -27,8 +27,15 @@ messages:
   spoils-blocked-self: "&cYou must claim your existing victor's spoils before starting or accepting another duel."
   spoils-blocked-target: "&c{player} has unclaimed victor's spoils and cannot duel yet."
   duel-start: "&6Duel started: &e{p1} &6vs &e{p2}&6{wager}."
+  duel-watch-broadcast: "&eA duel has begun. Click here to warp to the arena stands."
+  duel-watch-hover: "&7Warp to the arena stands to watch this duel."
+  duel-watch-teleported: "&aWarped to the arena stands."
+  duel-watch-unavailable: "&cThere is no active duel to watch."
+  duel-watch-participant: "&cYou are already participating in this duel."
   duel-end: "&6Duel ended: &e{winner}&6 won{wager}."
   duel-draw: "&6Duel ended in a draw."
+  duel-risk-warning: "&cDeath Duels are not keep-inventory. If you lose, you lose the gear you brought."
+  victory-moment: "&6Victory! &eYou will return to spawn shortly."
   draw-requested: "&e{player} &6requested a draw. Both players must agree."
   blocked-command: "&cCommands are locked during an active duel."
   chat-blocked: "&cChat is disabled during an active duel."
@@ -72,6 +79,15 @@ arena:
 settings:
   # Pending duel request lifetime in seconds.
   request-expire-seconds: 120
+
+  # Seconds players are frozen after teleport before the fight starts.
+  start-countdown-seconds: 5
+
+  # Seconds the winner remains in the arena after a kill before being sent to spawn.
+  victory-moment-seconds: 6
+
+  # Launch light celebration fireworks during the victory moment.
+  victory-fireworks: true
 
   # Disconnect grace during an active duel before the offline player forfeits.
   disconnect-grace-seconds: 30

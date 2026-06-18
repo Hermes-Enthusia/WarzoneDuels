@@ -250,6 +250,7 @@ public final class RuntimeStateStore {
             settings.isAllowChorusFruit(),
             settings.isAllowSpears(),
             settings.isAllowElytras(),
+            settings.isAllowEnderChests(),
             settings.getWager()
         );
     }
@@ -315,6 +316,7 @@ public final class RuntimeStateStore {
         section.set("allow-chorus-fruit", settings.allowChorusFruit());
         section.set("allow-spears", settings.allowSpears());
         section.set("allow-elytras", settings.allowElytras());
+        section.set("allow-ender-chests", settings.allowEnderChests());
         section.set("wager", settings.wager());
     }
 
@@ -360,6 +362,7 @@ public final class RuntimeStateStore {
         settings.setAllowChorusFruit(section.getBoolean("allow-chorus-fruit", settings.isAllowChorusFruit()));
         settings.setAllowSpears(section.getBoolean("allow-spears", settings.isAllowSpears()));
         settings.setAllowElytras(section.getBoolean("allow-elytras", settings.isAllowElytras()));
+        settings.setAllowEnderChests(section.getBoolean("allow-ender-chests", settings.isAllowEnderChests()));
         settings.setWager(section.getDouble("wager"));
         return settings;
     }
@@ -507,6 +510,7 @@ public final class RuntimeStateStore {
         boolean allowChorusFruit,
         boolean allowSpears,
         boolean allowElytras,
+        boolean allowEnderChests,
         double wager
     ) {
     }

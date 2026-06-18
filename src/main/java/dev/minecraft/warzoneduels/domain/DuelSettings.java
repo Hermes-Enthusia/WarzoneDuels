@@ -33,6 +33,7 @@ public final class DuelSettings {
     private boolean allowChorusFruit = true;
     private boolean allowSpears = true;
     private boolean allowElytras = true;
+    private boolean allowEnderChests;
     private double wager;
 
     public String getMapId() {
@@ -203,6 +204,14 @@ public final class DuelSettings {
         this.allowElytras = allowElytras;
     }
 
+    public boolean isAllowEnderChests() {
+        return allowEnderChests;
+    }
+
+    public void setAllowEnderChests(boolean allowEnderChests) {
+        this.allowEnderChests = allowEnderChests;
+    }
+
     public double getWager() {
         return wager;
     }
@@ -253,7 +262,8 @@ public final class DuelSettings {
     public String formatExtendedItemRules() {
         return formatItemRules()
             + ", Spears: " + onOff(allowSpears)
-            + ", Elytras: " + onOff(allowElytras);
+            + ", Elytras: " + onOff(allowElytras)
+            + ", Ender Chests: " + onOff(allowEnderChests);
     }
 
     public DuelSettings copy() {
@@ -279,6 +289,7 @@ public final class DuelSettings {
         copy.allowChorusFruit = allowChorusFruit;
         copy.allowSpears = allowSpears;
         copy.allowElytras = allowElytras;
+        copy.allowEnderChests = allowEnderChests;
         copy.wager = wager;
         return copy;
     }

@@ -217,6 +217,17 @@ public final class DuelGui {
             0,
             false
         ));
+        inv.setItem(40, combatToggleItem(
+            Material.ENDER_CHEST,
+            "Ender Chests",
+            settings.isAllowEnderChests(),
+            List.of(
+                ChatColor.GRAY + "Controls physical ender chest access.",
+                ChatColor.GRAY + "Disabled means no mid-duel storage access."
+            ),
+            0,
+            false
+        ));
 
         inv.setItem(45, item(Material.ARROW, ChatColor.AQUA + (returnToConfirm ? "Back to Review" : "Back"), ChatColor.GRAY + "Return to the previous setup step."));
         inv.setItem(53, item(Material.GOLD_INGOT, ChatColor.GOLD + (returnToConfirm ? "Save and Return" : "Continue to Wager"), ChatColor.GRAY + (returnToConfirm ? "Return to the duel review screen." : "Lock in these combat rules and set the wager.")));
@@ -305,7 +316,10 @@ public final class DuelGui {
         fillBackground(inv);
         inv.setItem(4, item(Material.BOOK, ChatColor.GOLD + "Review the Duel",
             ChatColor.GRAY + "Click any section below to edit it.",
-            ChatColor.GRAY + "Each editor returns here when saved."
+            ChatColor.GRAY + "Each editor returns here when saved.",
+            "",
+            ChatColor.RED + "Not keep inventory.",
+            ChatColor.RED + "The loser risks the gear they bring."
         ));
         inv.setItem(19, item(Material.FILLED_MAP, ChatColor.YELLOW + "Map",
             value("Map", settings.getMapDisplayName()),
@@ -325,6 +339,7 @@ public final class DuelGui {
             value("Maces", ruleState(settings.isAllowMaces())),
             value("Spears", ruleState(settings.isAllowSpears())),
             value("Chorus Fruit", ruleState(settings.isAllowChorusFruit())),
+            value("Ender Chests", ruleState(settings.isAllowEnderChests())),
             "",
             action("Click to edit")
         ));
@@ -354,7 +369,10 @@ public final class DuelGui {
     public static Inventory buildRequestPreviewGui(String requesterName, DuelSettings settings) {
         Inventory inv = Bukkit.createInventory(new GuiHolder(GuiType.REQUEST_PREVIEW), 36, ChatColor.GOLD + "Duel Request");
         inv.setItem(4, item(Material.PAPER, ChatColor.GOLD + "Challenger",
-            value("Player", requesterName)
+            value("Player", requesterName),
+            "",
+            ChatColor.RED + "Not keep inventory.",
+            ChatColor.RED + "The loser risks the gear they bring."
         ));
         inv.setItem(10, item(Material.FILLED_MAP, ChatColor.YELLOW + "Map",
             value("Map", settings.getMapDisplayName())
@@ -369,7 +387,8 @@ public final class DuelGui {
             value("Elytras", ruleState(settings.isAllowElytras())),
             value("Maces", ruleState(settings.isAllowMaces())),
             value("Spears", ruleState(settings.isAllowSpears())),
-            value("Chorus Fruit", ruleState(settings.isAllowChorusFruit()))
+            value("Chorus Fruit", ruleState(settings.isAllowChorusFruit())),
+            value("Ender Chests", ruleState(settings.isAllowEnderChests()))
         ));
         inv.setItem(16, settings.shouldShowExplosivesConfiguration()
             ? item(Material.TNT, ChatColor.YELLOW + "Explosives",
@@ -392,7 +411,9 @@ public final class DuelGui {
         Inventory inv = Bukkit.createInventory(new GuiHolder(GuiType.ACTIVE_SETTINGS), 45, ChatColor.GOLD + "Active Duel Settings");
         fillBackground(inv);
         inv.setItem(4, item(Material.NETHER_STAR, ChatColor.GOLD + "Current Duel Settings",
-            ChatColor.GRAY + "A read-only view of the active duel."
+            ChatColor.GRAY + "A read-only view of the active duel.",
+            "",
+            ChatColor.RED + "Not keep inventory."
         ));
         inv.setItem(19, item(Material.FILLED_MAP, ChatColor.YELLOW + "Map",
             value("Map", settings.getMapDisplayName())
@@ -407,7 +428,8 @@ public final class DuelGui {
             value("Elytras", ruleState(settings.isAllowElytras())),
             value("Maces", ruleState(settings.isAllowMaces())),
             value("Spears", ruleState(settings.isAllowSpears())),
-            value("Chorus Fruit", ruleState(settings.isAllowChorusFruit()))
+            value("Chorus Fruit", ruleState(settings.isAllowChorusFruit())),
+            value("Ender Chests", ruleState(settings.isAllowEnderChests()))
         ));
         inv.setItem(25, settings.shouldShowExplosivesConfiguration()
             ? item(Material.TNT, ChatColor.YELLOW + "Explosives",
@@ -510,7 +532,8 @@ public final class DuelGui {
             ChatColor.GRAY + "Maces: " + ruleState(settings.isAllowMaces()),
             ChatColor.GRAY + "Chorus Fruit: " + ruleState(settings.isAllowChorusFruit()),
             ChatColor.GRAY + "Spears: " + ruleState(settings.isAllowSpears()),
-            ChatColor.GRAY + "Elytras: " + ruleState(settings.isAllowElytras())
+            ChatColor.GRAY + "Elytras: " + ruleState(settings.isAllowElytras()),
+            ChatColor.GRAY + "Ender Chests: " + ruleState(settings.isAllowEnderChests())
         };
     }
 

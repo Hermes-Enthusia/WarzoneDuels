@@ -27,6 +27,8 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
+import org.bukkit.Color;
+import org.bukkit.FireworkEffect;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -34,7 +36,9 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Firework;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.meta.FireworkMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.Sound;
@@ -52,6 +56,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 public final class DuelService {
     private static final Set<String> BUILT_IN_ALLOWED_DUEL_COMMANDS = Set.of(
@@ -89,6 +94,7 @@ public final class DuelService {
     private final Map<UUID, Long> blockedItemMessageCooldowns = new HashMap<>();
     private final Map<UUID, Long> arenaExitMessageCooldowns = new HashMap<>();
     private final Map<UUID, Material> trackedExplosionSources = new HashMap<>();
+    private final Set<UUID> victoryFireworkIds = new HashSet<>();
 
     private ArenaDefinition arena;
     private DuelRequest pendingRequest;
@@ -104,6 +110,8 @@ public final class DuelService {
     private boolean allowWaterDrain;
     private boolean clearPlacedBlocksWhenNoBreak;
     private int startCountdownSeconds;
+    private int victoryMomentSeconds;
+    private boolean victoryFireworks;
     private String matchmakingWorld;
     private int matchmakingMinX;
     private int matchmakingMaxX;
@@ -120,7 +128,9 @@ public final class DuelService {
     private BukkitTask countdownTask;
     private BukkitTask queuedStartTask;
     private BukkitTask containmentTask;
+    private BukkitTask victoryTask;
     private boolean duelCountdownActive;
+    private boolean duelEnding;
 
     public DuelService(
         WarzoneDuelsPlugin plugin,
@@ -168,10 +178,23 @@ public final class DuelService {
         cancelQueuedStartTask();
         cancelCountdownTask();
         cancelContainmentTask();
+        cancelVictoryTask();
 
         if (preparingDuel != null) {
             refundWagerIfHeld(preparingDuel);
             preparingDuel = null;
+        }
+
+        if (duelEnding && activeDuel != null) {
+            teleportOnlineParticipantsToExit(activeDuel);
+            activeDuel = null;
+            duelEnding = false;
+            runtimeStateStore.clearRuntime();
+            runtimeStateStore.clearReloadResumeMarker();
+            rebuildParticipantIndex();
+            cleanupVolatileArenaState();
+            loadoutArchiveStore.shutdown();
+            return;
         }
 
         if (serverStopping) {
@@ -209,6 +232,8 @@ public final class DuelService {
         allowWaterDrain = config.getBoolean("settings.allow-water-drain", true);
         clearPlacedBlocksWhenNoBreak = config.getBoolean("settings.clear-placed-blocks-when-no-break", true);
         startCountdownSeconds = Math.max(0, config.getInt("settings.start-countdown-seconds", 5));
+        victoryMomentSeconds = Math.max(0, config.getInt("settings.victory-moment-seconds", 6));
+        victoryFireworks = config.getBoolean("settings.victory-fireworks", true);
         matchmakingWorld = config.getString("matchmaking-spawn.world", config.getString("arena.world", "world"));
         matchmakingMinX = Math.min(config.getInt("matchmaking-spawn.corner1.x", -218), config.getInt("matchmaking-spawn.corner2.x", 219));
         matchmakingMaxX = Math.max(config.getInt("matchmaking-spawn.corner1.x", -218), config.getInt("matchmaking-spawn.corner2.x", 219));
@@ -513,6 +538,24 @@ public final class DuelService {
             return;
         }
         player.openInventory(DuelGui.buildActiveSettingsGui(activeDuel.settings()));
+    }
+
+    public void watchDuel(Player player) {
+        requirePrimaryThread();
+        if (activeDuel == null) {
+            sendMessage(player, "messages.duel-watch-unavailable");
+            return;
+        }
+        if (isInActiveDuel(player.getUniqueId())) {
+            sendMessage(player, "messages.duel-watch-participant");
+            return;
+        }
+        if (blockCombatEntry && combatTagPort != null && combatTagPort.isInCombat(player)) {
+            sendMessage(player, "messages.arena-combat-entry-blocked");
+            return;
+        }
+        teleportSafe(player, arena.spectator());
+        sendMessage(player, "messages.duel-watch-teleported");
     }
 
     public void reloadFromCommand(CommandSender sender) {
@@ -1025,6 +1068,10 @@ public final class DuelService {
         }
     }
 
+    public boolean isVictoryFirework(UUID entityId) {
+        return entityId != null && victoryFireworkIds.contains(entityId);
+    }
+
     public boolean shouldCancelDamage(Player victim, Player attacker) {
         if (activeDuel == null) {
             return false;
@@ -1089,6 +1136,13 @@ public final class DuelService {
         };
     }
 
+    public boolean canUseEnderChest(Player actor) {
+        if (activeDuel == null || actor == null || !isInActiveDuel(actor.getUniqueId())) {
+            return true;
+        }
+        return !duelCountdownActive && activeDuel.settings().isAllowEnderChests();
+    }
+
     public int combatCooldownSeconds(Material material, Player actor) {
         if (activeDuel == null || !isInActiveDuel(actor.getUniqueId())) {
             return 0;
@@ -1149,7 +1203,7 @@ public final class DuelService {
 
     public Collection<String> commandSuggestions() {
         return List.of(
-            "accept", "deny", "review", "draw", "surrender", "cancel", "vault", "stats", "info", "settings",
+            "accept", "deny", "review", "watch", "spectate", "stands", "draw", "surrender", "cancel", "vault", "stats", "info", "settings",
             "reload", "restoreloadout", "mapsave", "mapload", "mapstatus",
             "setpos1", "setpos2", "setspawn1", "setspawn2", "setspectator", "setexit"
         );
@@ -1268,6 +1322,7 @@ public final class DuelService {
             }
             preparingDuel = null;
             activeDuel = stagedDuel;
+            duelEnding = false;
             queuedDuelStart = null;
             arenaMapService.prepareArenaForMatch(arena, activeDuel.settings());
             clearExternalCombatState(requester);
@@ -1278,10 +1333,13 @@ public final class DuelService {
             teleportToAssignedSpawn(target);
             rebuildParticipantIndex();
             startContainmentMonitor();
+            sendMessage(requester, "messages.duel-risk-warning");
+            sendMessage(target, "messages.duel-risk-warning");
             sendMessageRaw(requester, ChatColor.RED + "Disconnecting gives you " + disconnectGraceSeconds + " seconds to rejoin before you lose.");
             sendMessageRaw(target, ChatColor.RED + "Disconnecting gives you " + disconnectGraceSeconds + " seconds to rejoin before you lose.");
             String wagerText = preparedSettings.getWager() > 0D ? " for $" + formatAmount(preparedSettings.getWager()) : "";
             broadcast("messages.duel-start", "{p1}", requester.getName(), "{p2}", target.getName(), "{wager}", wagerText);
+            broadcastWatchPrompt(requester.getUniqueId(), target.getUniqueId());
             runtimeStateStore.queueActiveDuelSave(activeDuel, 1L);
             startCountdown(requester, target);
         }, message -> {
@@ -1297,14 +1355,14 @@ public final class DuelService {
 
     private void concludeDuel(Player winner, DuelEndReason reason, boolean broadcastOutcome) {
         requirePrimaryThread();
-        if (activeDuel == null) {
+        if (activeDuel == null || duelEnding) {
             return;
         }
         ActiveDuel finishedDuel = activeDuel;
         UUID winnerId = winner == null ? null : winner.getUniqueId();
+        duelEnding = true;
         cancelCountdownTask();
         cancelDisconnectMonitorTask();
-        cancelContainmentTask();
 
         if (winner != null) {
             payoutWager(winner);
@@ -1319,6 +1377,20 @@ public final class DuelService {
             }
         }
 
+        duelAnalyticsService.recordDuel(finishedDuel, winnerId, reason);
+        statsService.recordMatchResult(finishedDuel, winnerId, reason);
+        runtimeStateStore.clearRuntime();
+
+        if (winner != null && reason == DuelEndReason.KILL && victoryMomentSeconds > 0) {
+            healAfterDuel(winner);
+            startVictoryMoment(finishedDuel, winner);
+            return;
+        }
+
+        finishConcludedDuel(finishedDuel, winner);
+    }
+
+    private void finishConcludedDuel(ActiveDuel finishedDuel, Player winner) {
         UUID participantOne = finishedDuel.participantOne().playerId();
         UUID participantTwo = finishedDuel.participantTwo().playerId();
 
@@ -1336,11 +1408,67 @@ public final class DuelService {
         }
 
         activeDuel = null;
-        runtimeStateStore.clearRuntime();
+        duelEnding = false;
+        cancelVictoryTask();
+        cancelContainmentTask();
         rebuildParticipantIndex();
-        duelAnalyticsService.recordDuel(finishedDuel, winnerId, reason);
-        statsService.recordMatchResult(finishedDuel, winnerId, reason);
         cleanupArenaAfterMatch(finishedDuel, true);
+    }
+
+    private void teleportOnlineParticipantsToExit(ActiveDuel duel) {
+        if (duel == null) {
+            return;
+        }
+        for (UUID playerId : List.of(duel.participantOne().playerId(), duel.participantTwo().playerId())) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null && player.isOnline() && !player.isDead()) {
+                teleportToExit(player);
+            }
+        }
+    }
+
+    private void startVictoryMoment(ActiveDuel finishedDuel, Player winner) {
+        sendMessage(winner, "messages.victory-moment");
+        winner.sendTitle(color("&6Victory"), color("&7You will return to spawn shortly."), 5, 50, 10);
+        winner.playSound(winner.getLocation(), Sound.UI_TOAST_CHALLENGE_COMPLETE, 1.0F, 1.0F);
+        int totalTicks = victoryMomentSeconds * 20;
+        final int[] elapsedTicks = {0};
+        cancelVictoryTask();
+        victoryTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (activeDuel != finishedDuel) {
+                cancelVictoryTask();
+                return;
+            }
+            if (victoryFireworks && elapsedTicks[0] % 20 == 0) {
+                launchVictoryFireworks(winner.getLocation());
+            }
+            elapsedTicks[0] += 10;
+            if (elapsedTicks[0] >= totalTicks) {
+                finishConcludedDuel(finishedDuel, winner);
+            }
+        }, 0L, 10L);
+    }
+
+    private void launchVictoryFireworks(Location center) {
+        if (center == null || center.getWorld() == null || arena == null) {
+            return;
+        }
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        for (int i = 0; i < 3; i++) {
+            Location location = center.clone().add(random.nextDouble(-8D, 8D), random.nextDouble(2D, 5D), random.nextDouble(-8D, 8D));
+            Firework firework = center.getWorld().spawn(location, Firework.class);
+            victoryFireworkIds.add(firework.getUniqueId());
+            FireworkMeta meta = firework.getFireworkMeta();
+            meta.setPower(1);
+            meta.addEffect(FireworkEffect.builder()
+                .with(FireworkEffect.Type.BALL_LARGE)
+                .withColor(Color.ORANGE, Color.YELLOW)
+                .withFade(Color.WHITE)
+                .trail(true)
+                .flicker(true)
+                .build());
+            firework.setFireworkMeta(meta);
+        }
     }
 
     private void cleanupArenaAfterMatch(ActiveDuel duel, boolean restoreDefaultTerrain) {
@@ -1377,6 +1505,7 @@ public final class DuelService {
         trackedExplosionSources.clear();
         blockedItemMessageCooldowns.clear();
         arenaExitMessageCooldowns.clear();
+        victoryFireworkIds.clear();
         pendingForcedDeathIds.clear();
         duelCountdownActive = false;
     }
@@ -1542,6 +1671,13 @@ public final class DuelService {
         }
     }
 
+    private void cancelVictoryTask() {
+        if (victoryTask != null) {
+            victoryTask.cancel();
+            victoryTask = null;
+        }
+    }
+
     private void clearPendingRequest() {
         pendingRequest = null;
         cancelRequestExpiryTask();
@@ -1567,6 +1703,8 @@ public final class DuelService {
         if (activeDuel.getWagerPot() > 0D) {
             economyPort.deposit(winner, activeDuel.getWagerPot());
         }
+        activeDuel.setWagerHeld(false);
+        activeDuel.setWagerPot(0D);
     }
 
     private void refundWagerIfHeld() {
@@ -1576,6 +1714,8 @@ public final class DuelService {
         double each = activeDuel.settings().getWager();
         economyPort.deposit(activeDuel.participantOne().playerId(), each);
         economyPort.deposit(activeDuel.participantTwo().playerId(), each);
+        activeDuel.setWagerHeld(false);
+        activeDuel.setWagerPot(0D);
     }
 
     private void refundPersistedWagerIfHeld(ActiveDuel duel) {
@@ -1585,6 +1725,8 @@ public final class DuelService {
         double each = duel.settings().getWager();
         economyPort.deposit(duel.participantOne().playerId(), each);
         economyPort.deposit(duel.participantTwo().playerId(), each);
+        duel.setWagerHeld(false);
+        duel.setWagerPot(0D);
     }
 
     private void refundWagerIfHeld(ActiveDuel duel) {
@@ -1723,6 +1865,24 @@ public final class DuelService {
             message = message.replace(replacements[i], replacements[i + 1]);
         }
         Bukkit.broadcastMessage(prefix + color(message));
+    }
+
+    private void broadcastWatchPrompt(UUID participantOne, UUID participantTwo) {
+        String message = plugin.getConfig().getString("messages.duel-watch-broadcast", "");
+        if (message == null || message.isEmpty()) {
+            return;
+        }
+        String hover = plugin.getConfig().getString("messages.duel-watch-hover", "&7Click to warp to the arena stands.");
+        Component component = Component.text("[Duel] ", NamedTextColor.GOLD)
+            .append(Component.text(ChatColor.stripColor(color(message)), NamedTextColor.YELLOW)
+                .clickEvent(ClickEvent.runCommand("/duel watch"))
+                .hoverEvent(net.kyori.adventure.text.event.HoverEvent.showText(Component.text(ChatColor.stripColor(color(hover)), NamedTextColor.GRAY))));
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (player.getUniqueId().equals(participantOne) || player.getUniqueId().equals(participantTwo)) {
+                continue;
+            }
+            player.sendMessage(component);
+        }
     }
 
     private String color(String input) {

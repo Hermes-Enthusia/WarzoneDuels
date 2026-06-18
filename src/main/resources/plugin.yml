@@ -6,7 +6,7 @@ softdepend: [Vault, EnthusiaTeleport, CombatLogX, Plan]
 commands:
   duel:
     description: Death Duel commands and setup tools.
-    usage: /duel <player|accept|deny|review|draw|surrender|cancel|vault|info|settings|reload|restoreloadout|stats>
+    usage: /duel <player|accept|deny|review|watch|draw|surrender|cancel|vault|info|settings|reload|restoreloadout|stats>
   surrender:
     description: Request a duel draw / surrender.
     usage: /surrender

@@ -8,6 +8,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EnderCrystal;
+import org.bukkit.entity.Firework;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
@@ -247,6 +248,15 @@ public final class DuelListener implements Listener {
         }
         if (event.getAction() == Action.RIGHT_CLICK_BLOCK
             && event.getClickedBlock() != null
+            && event.getClickedBlock().getType() == Material.ENDER_CHEST
+            && duelService.isInActiveDuel(event.getPlayer().getUniqueId())
+            && !duelService.canUseEnderChest(event.getPlayer())) {
+            event.setCancelled(true);
+            duelService.sendBlockedCombatItemMessage(event.getPlayer());
+            return;
+        }
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK
+            && event.getClickedBlock() != null
             && event.getClickedBlock().getType() == Material.RESPAWN_ANCHOR
             && duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
             if (!duelService.canUseExplosive(Material.RESPAWN_ANCHOR, event.getPlayer())) {
@@ -423,6 +433,10 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onDamage(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Firework firework && duelService.isVictoryFirework(firework.getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
         if (event.getEntity() instanceof EnderCrystal crystal) {
             Player attacker = resolveAttackingPlayer(event.getDamager());
             if (duelService.arena() == null || !duelService.arena().contains(crystal.getLocation())) {
@@ -543,10 +557,12 @@ public final class DuelListener implements Listener {
             return;
         }
         if (!duelService.isNearArenaTerrain(to, 2)) {
+            event.setTo(event.getFrom());
             duelService.handleArenaExitAttempt(event.getPlayer());
             return;
         }
         if (!duelService.arena().contains(to)) {
+            event.setTo(event.getFrom());
             duelService.handleArenaExitAttempt(event.getPlayer());
         }
     }
