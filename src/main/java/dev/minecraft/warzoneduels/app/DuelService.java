@@ -48,8 +48,6 @@ import org.bukkit.scheduler.BukkitTask;
 
 import java.net.InetAddress;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -82,19 +80,19 @@ public final class DuelService {
     private final ArenaTerrainService arenaTerrainService;
     private CombatTagPort combatTagPort;
 
-    private final Map<UUID, BuilderSession> builders = new HashMap<>();
-    private final Set<UUID> oneTimeTeleportAllowance = new HashSet<>();
-    private final Set<UUID> allowedArenaItemEntityIds = new HashSet<>();
+    private final Map<UUID, BuilderSession> builders = new ConcurrentHashMap<>();
+    private final Set<UUID> oneTimeTeleportAllowance = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> allowedArenaItemEntityIds = ConcurrentHashMap.newKeySet();
     private final Map<BlockKey, Long> allowedArenaItemSpawnLocations = new ConcurrentHashMap<>();
-    private final Set<UUID> respawnToSpawn = new HashSet<>();
-    private final Set<UUID> recoveryTeleportIds = new HashSet<>();
+    private final Set<UUID> respawnToSpawn = ConcurrentHashMap.newKeySet();
+    private final Set<UUID> recoveryTeleportIds = ConcurrentHashMap.newKeySet();
     private final Set<UUID> activeParticipantIndex = ConcurrentHashMap.newKeySet();
-    private final Map<UUID, LoadoutSnapshot> disconnectSnapshots = new HashMap<>();
-    private final Set<UUID> pendingForcedDeathIds = new HashSet<>();
-    private final Map<UUID, Long> blockedItemMessageCooldowns = new HashMap<>();
-    private final Map<UUID, Long> arenaExitMessageCooldowns = new HashMap<>();
-    private final Map<UUID, Material> trackedExplosionSources = new HashMap<>();
-    private final Set<UUID> victoryFireworkIds = new HashSet<>();
+    private final Map<UUID, LoadoutSnapshot> disconnectSnapshots = new ConcurrentHashMap<>();
+    private final Set<UUID> pendingForcedDeathIds = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Long> blockedItemMessageCooldowns = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> arenaExitMessageCooldowns = new ConcurrentHashMap<>();
+    private final Map<UUID, Material> trackedExplosionSources = new ConcurrentHashMap<>();
+    private final Set<UUID> victoryFireworkIds = ConcurrentHashMap.newKeySet();
 
     private ArenaDefinition arena;
     private DuelRequest pendingRequest;
