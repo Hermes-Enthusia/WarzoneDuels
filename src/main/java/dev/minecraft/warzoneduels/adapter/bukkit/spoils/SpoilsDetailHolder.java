@@ -3,20 +3,20 @@ package dev.minecraft.warzoneduels.adapter.bukkit.spoils;
 import java.util.UUID;
 
 public final class SpoilsDetailHolder extends AbstractSpoilsHolder {
-    private final UUID entryId;
-    private final int page;
+    private final UUID entryUuid;
+    private final int pageNumber;
 
     public SpoilsDetailHolder(UUID ownerId, UUID entryId, int page) {
         super(ownerId);
-        this.entryId = entryId;
-        this.page = page;
+        this.entryUuid = entryId;
+        this.pageNumber = page;
     }
 
     public UUID entryId() {
-        return entryId;
+        return entryUuid;
     }
 
     public int page() {
-        return page;
+        return pageNumber;
     }
 }

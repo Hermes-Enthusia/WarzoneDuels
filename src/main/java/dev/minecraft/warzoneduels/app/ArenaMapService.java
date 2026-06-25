@@ -30,10 +30,10 @@ public final class ArenaMapService {
         "Default map. Safe for standard flat fights."
     );
 
-    private List<DuelMapOption> options = List.of(FALLBACK_MAP);
+    private List<DuelMapOption> configuredOptions = List.of(FALLBACK_MAP);
     private Map<String, DuelMapOption> optionsById = Map.of(FALLBACK_MAP.id(), FALLBACK_MAP);
     private DuelMapOption defaultMap = FALLBACK_MAP;
-    private String currentArenaMapId = FALLBACK_MAP.id();
+    private String selectedArenaMapId = FALLBACK_MAP.id();
 
     public void reload(FileConfiguration config) {
         List<DuelMapOption> loaded = new ArrayList<>();
@@ -81,20 +81,20 @@ public final class ArenaMapService {
             discoveredDefault = indexed.getOrDefault(FALLBACK_MAP.id(), loaded.get(0));
         }
 
-        options = List.copyOf(loaded);
+        configuredOptions = List.copyOf(loaded);
         optionsById = Map.copyOf(indexed);
         defaultMap = discoveredDefault;
-        if (!optionsById.containsKey(currentArenaMapId.toLowerCase(Locale.ROOT))) {
-            currentArenaMapId = defaultMap.id();
+        if (!optionsById.containsKey(selectedArenaMapId.toLowerCase(Locale.ROOT))) {
+            selectedArenaMapId = defaultMap.id();
         }
     }
 
     public void promoteSavedMaps(Predicate<String> snapshotExists) {
-        if (snapshotExists == null || options.isEmpty()) {
+        if (snapshotExists == null || configuredOptions.isEmpty()) {
             return;
         }
-        List<DuelMapOption> adjusted = new ArrayList<>(options.size());
-        for (DuelMapOption option : options) {
+        List<DuelMapOption> adjusted = new ArrayList<>(configuredOptions.size());
+        for (DuelMapOption option : configuredOptions) {
             boolean unlocked = option.available() || option.defaultMap() || snapshotExists.test(option.id());
             adjusted.add(new DuelMapOption(
                 option.id(),
@@ -119,7 +119,7 @@ public final class ArenaMapService {
                 discoveredDefault = option;
             }
         }
-        options = List.copyOf(adjusted);
+        configuredOptions = List.copyOf(adjusted);
         optionsById = Map.copyOf(indexed);
         if (discoveredDefault != null) {
             defaultMap = discoveredDefault;
@@ -127,7 +127,7 @@ public final class ArenaMapService {
     }
 
     public List<DuelMapOption> options() {
-        return options;
+        return configuredOptions;
     }
 
     public DuelMapOption resolve(String mapId) {
@@ -146,7 +146,7 @@ public final class ArenaMapService {
             return direct;
         }
         String normalized = mapId.toLowerCase(Locale.ROOT).replace(" ", "").replace("-", "").replace("_", "");
-        for (DuelMapOption option : options) {
+        for (DuelMapOption option : configuredOptions) {
             String optionId = option.id().toLowerCase(Locale.ROOT).replace("_", "");
             String display = option.displayName().toLowerCase(Locale.ROOT).replace(" ", "").replace("-", "").replace("_", "");
             if (normalized.equals(optionId) || normalized.equals(display)) {
@@ -178,19 +178,19 @@ public final class ArenaMapService {
     }
 
     public void prepareArenaForMatch(ArenaDefinition arena, DuelSettings settings) {
-        currentArenaMapId = resolve(settings.getMapId()).id();
+        selectedArenaMapId = resolve(settings.getMapId()).id();
     }
 
     public void restoreDefaultArena(ArenaDefinition arena) {
-        currentArenaMapId = defaultMap.id();
+        selectedArenaMapId = defaultMap.id();
     }
 
     public void markCurrentArenaMap(String mapId) {
-        currentArenaMapId = resolve(mapId).id();
+        selectedArenaMapId = resolve(mapId).id();
     }
 
     public String currentArenaMapId() {
-        return currentArenaMapId;
+        return selectedArenaMapId;
     }
 
     public String defaultMapId() {

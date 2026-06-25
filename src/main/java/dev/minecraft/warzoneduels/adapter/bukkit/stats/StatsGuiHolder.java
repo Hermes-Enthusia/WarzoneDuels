@@ -6,26 +6,26 @@ import org.bukkit.inventory.InventoryHolder;
 import java.util.UUID;
 
 public final class StatsGuiHolder implements InventoryHolder {
-    private final StatsGuiType type;
-    private final UUID targetPlayerId;
-    private final int page;
+    private final StatsGuiType holderType;
+    private final UUID targetPlayerUuid;
+    private final int pageNumber;
 
     public StatsGuiHolder(StatsGuiType type, UUID targetPlayerId, int page) {
-        this.type = type;
-        this.targetPlayerId = targetPlayerId;
-        this.page = page;
+        this.holderType = type;
+        this.targetPlayerUuid = targetPlayerId;
+        this.pageNumber = page;
     }
 
     public StatsGuiType type() {
-        return type;
+        return holderType;
     }
 
     public UUID targetPlayerId() {
-        return targetPlayerId;
+        return targetPlayerUuid;
     }
 
     public int page() {
-        return page;
+        return pageNumber;
     }
 
     @Override

@@ -7,14 +7,14 @@ import java.util.List;
 import java.util.UUID;
 
 public final class SpoilsEntry {
-    private final UUID entryId;
-    private final UUID ownerId;
-    private final String ownerName;
-    private final UUID sourcePlayerId;
-    private final String sourcePlayerName;
-    private final long createdAtEpochMs;
-    private final long expiresAtEpochMs;
-    private final List<ItemStack> items;
+    private final UUID entryUuid;
+    private final UUID ownerUuid;
+    private final String ownerDisplayName;
+    private final UUID sourcePlayerUuid;
+    private final String sourcePlayerDisplayName;
+    private final long createdAtMillis;
+    private final long expiresAtMillis;
+    private final List<ItemStack> storedItems;
 
     public SpoilsEntry(
         UUID entryId,
@@ -26,66 +26,66 @@ public final class SpoilsEntry {
         long expiresAtEpochMs,
         List<ItemStack> items
     ) {
-        this.entryId = entryId;
-        this.ownerId = ownerId;
-        this.ownerName = ownerName;
-        this.sourcePlayerId = sourcePlayerId;
-        this.sourcePlayerName = sourcePlayerName;
-        this.createdAtEpochMs = createdAtEpochMs;
-        this.expiresAtEpochMs = expiresAtEpochMs;
-        this.items = new ArrayList<>();
+        this.entryUuid = entryId;
+        this.ownerUuid = ownerId;
+        this.ownerDisplayName = ownerName;
+        this.sourcePlayerUuid = sourcePlayerId;
+        this.sourcePlayerDisplayName = sourcePlayerName;
+        this.createdAtMillis = createdAtEpochMs;
+        this.expiresAtMillis = expiresAtEpochMs;
+        this.storedItems = new ArrayList<>();
         for (ItemStack item : items) {
             if (item != null) {
-                this.items.add(item.clone());
+                this.storedItems.add(item.clone());
             }
         }
     }
 
     public UUID entryId() {
-        return entryId;
+        return entryUuid;
     }
 
     public UUID ownerId() {
-        return ownerId;
+        return ownerUuid;
     }
 
     public String ownerName() {
-        return ownerName;
+        return ownerDisplayName;
     }
 
     public UUID sourcePlayerId() {
-        return sourcePlayerId;
+        return sourcePlayerUuid;
     }
 
     public String sourcePlayerName() {
-        return sourcePlayerName;
+        return sourcePlayerDisplayName;
     }
 
     public long createdAtEpochMs() {
-        return createdAtEpochMs;
+        return createdAtMillis;
     }
 
     public long expiresAtEpochMs() {
-        return expiresAtEpochMs;
+        return expiresAtMillis;
     }
 
     public List<ItemStack> items() {
         List<ItemStack> copy = new ArrayList<>();
-        for (ItemStack item : items) {
+        for (ItemStack item : storedItems) {
             copy.add(item == null ? null : item.clone());
         }
         return copy;
     }
 
     public int itemCount() {
-        return items.size();
+        return storedItems.size();
     }
 
     public boolean isEmpty() {
-        return items.isEmpty();
+        return storedItems.isEmpty();
     }
 
     public List<ItemStack> mutableItems() {
-        return items;
+        return storedItems;
     }
 }

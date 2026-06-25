@@ -3,110 +3,110 @@ package dev.minecraft.warzoneduels.domain.stats;
 import java.util.UUID;
 
 public final class PlayerDuelStats {
-    private final UUID playerId;
-    private String lastKnownName;
-    private int matchesPlayed;
-    private int wins;
-    private int losses;
-    private int draws;
-    private int disconnectForfeitLosses;
-    private int currentWinStreak;
-    private int bestWinStreak;
+    private final UUID playerUuid;
+    private String storedLastKnownName;
+    private int matchesPlayedCount;
+    private int winCount;
+    private int lossCount;
+    private int drawCount;
+    private int disconnectForfeitLossCount;
+    private int currentWinStreakCount;
+    private int bestWinStreakCount;
 
     public PlayerDuelStats(UUID playerId, String lastKnownName) {
-        this.playerId = playerId;
-        this.lastKnownName = lastKnownName;
+        this.playerUuid = playerId;
+        this.storedLastKnownName = lastKnownName;
     }
 
     public UUID playerId() {
-        return playerId;
+        return playerUuid;
     }
 
     public String lastKnownName() {
-        return lastKnownName;
+        return storedLastKnownName;
     }
 
     public void setLastKnownName(String lastKnownName) {
-        this.lastKnownName = lastKnownName;
+        this.storedLastKnownName = lastKnownName;
     }
 
     public int matchesPlayed() {
-        return matchesPlayed;
+        return matchesPlayedCount;
     }
 
     public void setMatchesPlayed(int matchesPlayed) {
-        this.matchesPlayed = Math.max(0, matchesPlayed);
+        this.matchesPlayedCount = Math.max(0, matchesPlayed);
     }
 
     public int wins() {
-        return wins;
+        return winCount;
     }
 
     public void setWins(int wins) {
-        this.wins = Math.max(0, wins);
+        this.winCount = Math.max(0, wins);
     }
 
     public int losses() {
-        return losses;
+        return lossCount;
     }
 
     public void setLosses(int losses) {
-        this.losses = Math.max(0, losses);
+        this.lossCount = Math.max(0, losses);
     }
 
     public int draws() {
-        return draws;
+        return drawCount;
     }
 
     public void setDraws(int draws) {
-        this.draws = Math.max(0, draws);
+        this.drawCount = Math.max(0, draws);
     }
 
     public int disconnectForfeitLosses() {
-        return disconnectForfeitLosses;
+        return disconnectForfeitLossCount;
     }
 
     public void setDisconnectForfeitLosses(int disconnectForfeitLosses) {
-        this.disconnectForfeitLosses = Math.max(0, disconnectForfeitLosses);
+        this.disconnectForfeitLossCount = Math.max(0, disconnectForfeitLosses);
     }
 
     public int currentWinStreak() {
-        return currentWinStreak;
+        return currentWinStreakCount;
     }
 
     public void setCurrentWinStreak(int currentWinStreak) {
-        this.currentWinStreak = Math.max(0, currentWinStreak);
+        this.currentWinStreakCount = Math.max(0, currentWinStreak);
     }
 
     public int bestWinStreak() {
-        return bestWinStreak;
+        return bestWinStreakCount;
     }
 
     public void setBestWinStreak(int bestWinStreak) {
-        this.bestWinStreak = Math.max(0, bestWinStreak);
+        this.bestWinStreakCount = Math.max(0, bestWinStreak);
     }
 
     public void recordWin() {
-        matchesPlayed++;
-        wins++;
-        currentWinStreak++;
-        if (currentWinStreak > bestWinStreak) {
-            bestWinStreak = currentWinStreak;
+        matchesPlayedCount++;
+        winCount++;
+        currentWinStreakCount++;
+        if (currentWinStreakCount > bestWinStreakCount) {
+            bestWinStreakCount = currentWinStreakCount;
         }
     }
 
     public void recordLoss(boolean disconnectForfeit) {
-        matchesPlayed++;
-        losses++;
-        currentWinStreak = 0;
+        matchesPlayedCount++;
+        lossCount++;
+        currentWinStreakCount = 0;
         if (disconnectForfeit) {
-            disconnectForfeitLosses++;
+            disconnectForfeitLossCount++;
         }
     }
 
     public void recordDraw() {
-        matchesPlayed++;
-        draws++;
-        currentWinStreak = 0;
+        matchesPlayedCount++;
+        drawCount++;
+        currentWinStreakCount = 0;
     }
 }

@@ -7,17 +7,17 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class ArenaSnapshot {
-    private final Map<BlockKey, SavedBlockState> blocks;
+    private final Map<BlockKey, SavedBlockState> savedBlocks;
 
     public ArenaSnapshot(Map<BlockKey, SavedBlockState> blocks) {
-        this.blocks = Collections.unmodifiableMap(new LinkedHashMap<>(blocks));
+        this.savedBlocks = Collections.unmodifiableMap(new LinkedHashMap<>(blocks));
     }
 
     public Map<BlockKey, SavedBlockState> blocks() {
-        return blocks;
+        return savedBlocks;
     }
 
     public boolean isEmpty() {
-        return blocks.isEmpty();
+        return savedBlocks.isEmpty();
     }
 }

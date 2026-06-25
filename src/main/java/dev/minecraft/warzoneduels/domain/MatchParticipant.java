@@ -3,37 +3,37 @@ package dev.minecraft.warzoneduels.domain;
 import java.util.UUID;
 
 public final class MatchParticipant {
-    private final UUID playerId;
-    private final String name;
-    private boolean drawRequested;
-    private Long disconnectDeadlineEpochMs;
+    private final UUID playerUuid;
+    private final String playerName;
+    private boolean hasRequestedDraw;
+    private Long disconnectDeadlineMillis;
 
     public MatchParticipant(UUID playerId, String name) {
-        this.playerId = playerId;
-        this.name = name;
+        this.playerUuid = playerId;
+        this.playerName = name;
     }
 
     public UUID playerId() {
-        return playerId;
+        return playerUuid;
     }
 
     public String name() {
-        return name;
+        return playerName;
     }
 
     public boolean drawRequested() {
-        return drawRequested;
+        return hasRequestedDraw;
     }
 
     public void setDrawRequested(boolean drawRequested) {
-        this.drawRequested = drawRequested;
+        this.hasRequestedDraw = drawRequested;
     }
 
     public Long disconnectDeadlineEpochMs() {
-        return disconnectDeadlineEpochMs;
+        return disconnectDeadlineMillis;
     }
 
     public void setDisconnectDeadlineEpochMs(Long disconnectDeadlineEpochMs) {
-        this.disconnectDeadlineEpochMs = disconnectDeadlineEpochMs;
+        this.disconnectDeadlineMillis = disconnectDeadlineEpochMs;
     }
 }

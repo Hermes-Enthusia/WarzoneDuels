@@ -38,9 +38,9 @@ import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class WarzoneDuelsPlugin extends JavaPlugin {
-    private DuelService duelService;
-    private SpoilsService spoilsService;
-    private ArenaTerrainService arenaTerrainService;
+    private DuelService activeDuelService;
+    private SpoilsService activeSpoilsService;
+    private ArenaTerrainService activeArenaTerrainService;
     private CombatTagPort combatTagPort;
     private StatsService statsService;
     private DuelAnalyticsService analyticsService;
@@ -57,15 +57,15 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
         SpoilsStore spoilsStore = new SpoilsStore(this);
         ArenaResetService arenaResetService = new ArenaResetService();
         ArenaMapService arenaMapService = new ArenaMapService();
-        this.arenaTerrainService = new ArenaTerrainService(
+        this.activeArenaTerrainService = new ArenaTerrainService(
             this,
             arenaMapService,
             new ArenaFootprintStore(this),
             new ArenaMapSnapshotStore(this)
         );
-        arenaTerrainService.enable();
-        this.spoilsService = new SpoilsService(this, spoilsStore);
-        spoilsService.enable();
+        activeArenaTerrainService.enable();
+        this.activeSpoilsService = new SpoilsService(this, spoilsStore);
+        activeSpoilsService.enable();
         this.statsService = new StatsService(new PlayerStatsStore(this));
         statsService.enable();
         this.analyticsService = new DuelAnalyticsService(this, new DuelAnalyticsStore(this));
@@ -73,37 +73,37 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
         this.headCache = new PlayerHeadCache(this);
         headCache.load();
 
-        this.duelService = new DuelService(
+        this.activeDuelService = new DuelService(
             this,
             economyPort,
             spawnPort,
             runtimeStateStore,
             loadoutArchiveStore,
             arenaResetService,
-            spoilsService,
+            activeSpoilsService,
             statsService,
             analyticsService,
             arenaMapService,
-            arenaTerrainService,
+            activeArenaTerrainService,
             new NoOpCombatTagPort()
         );
-        this.combatTagPort = new CombatLogXCombatTagPort(this, duelService);
-        duelService.setCombatTagPort(combatTagPort);
+        this.combatTagPort = new CombatLogXCombatTagPort(this, activeDuelService);
+        activeDuelService.setCombatTagPort(combatTagPort);
         combatTagPort.enable();
-        duelService.enable();
-        if (!duelService.hasActiveDuel()) {
-            arenaTerrainService.ensureDefaultSnapshotLoaded(message -> getLogger().info(message));
+        activeDuelService.enable();
+        if (!activeDuelService.hasActiveDuel()) {
+            activeArenaTerrainService.ensureDefaultSnapshotLoaded(message -> getLogger().info(message));
         }
 
-        getServer().getPluginManager().registerEvents(new DuelListener(duelService), this);
-        getServer().getPluginManager().registerEvents(new DuelGuiListener(duelService), this);
-        getServer().getPluginManager().registerEvents(new SpoilsGuiListener(spoilsService), this);
+        getServer().getPluginManager().registerEvents(new DuelListener(activeDuelService), this);
+        getServer().getPluginManager().registerEvents(new DuelGuiListener(activeDuelService), this);
+        getServer().getPluginManager().registerEvents(new SpoilsGuiListener(activeSpoilsService), this);
         getServer().getPluginManager().registerEvents(new StatsGuiListener(statsService, headCache), this);
         getServer().getPluginManager().registerEvents(new PlayerHeadCacheListener(headCache), this);
 
         if (getConfig().getBoolean("plan.enabled", true)) {
             try {
-                new PlanHook(this, duelService, statsService, analyticsService).hookIntoPlan();
+                new PlanHook(this, activeDuelService, statsService, analyticsService).hookIntoPlan();
             } catch (NoClassDefFoundError ignored) {
                 getLogger().info("Plan is not installed; duel analytics integration disabled.");
             }
@@ -111,19 +111,19 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
 
         PluginCommand duelCommand = getCommand("duel");
         if (duelCommand != null) {
-            DuelCommand command = new DuelCommand(duelService, spoilsService);
+            DuelCommand command = new DuelCommand(activeDuelService, activeSpoilsService);
             duelCommand.setExecutor(command);
             duelCommand.setTabCompleter(command);
         }
         PluginCommand surrenderCommand = getCommand("surrender");
         if (surrenderCommand != null) {
-            DuelCommand command = new DuelCommand(duelService, spoilsService);
+            DuelCommand command = new DuelCommand(activeDuelService, activeSpoilsService);
             surrenderCommand.setExecutor(command);
             surrenderCommand.setTabCompleter(command);
         }
         PluginCommand vaultCommand = getCommand("vault");
         if (vaultCommand != null) {
-            SpoilsCommand command = new SpoilsCommand(spoilsService);
+            SpoilsCommand command = new SpoilsCommand(activeSpoilsService);
             vaultCommand.setExecutor(command);
             vaultCommand.setTabCompleter(command);
         }
@@ -137,11 +137,11 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        if (duelService != null) {
-            duelService.disable(isServerStopping());
+        if (activeDuelService != null) {
+            activeDuelService.disable(isServerStopping());
         }
-        if (spoilsService != null) {
-            spoilsService.disable();
+        if (activeSpoilsService != null) {
+            activeSpoilsService.disable();
         }
         if (statsService != null) {
             statsService.disable();
@@ -155,21 +155,21 @@ public class WarzoneDuelsPlugin extends JavaPlugin {
         if (combatTagPort != null) {
             combatTagPort.disable();
         }
-        if (arenaTerrainService != null) {
-            arenaTerrainService.disable();
+        if (activeArenaTerrainService != null) {
+            activeArenaTerrainService.disable();
         }
     }
 
     public DuelService duelService() {
-        return duelService;
+        return activeDuelService;
     }
 
     public SpoilsService spoilsService() {
-        return spoilsService;
+        return activeSpoilsService;
     }
 
     public ArenaTerrainService arenaTerrainService() {
-        return arenaTerrainService;
+        return activeArenaTerrainService;
     }
 
     private Economy setupEconomy() {

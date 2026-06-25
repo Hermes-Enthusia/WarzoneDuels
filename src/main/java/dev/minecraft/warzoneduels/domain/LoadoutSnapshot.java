@@ -8,17 +8,17 @@ import java.util.Collections;
 import java.util.List;
 
 public final class LoadoutSnapshot {
-    private final ItemStack[] contents;
-    private final ItemStack[] armor;
-    private final ItemStack offHand;
-    private final double health;
-    private final int foodLevel;
-    private final float saturation;
-    private final int totalExperience;
-    private final int level;
-    private final float expProgress;
-    private final int fireTicks;
-    private final List<PotionEffect> potionEffects;
+    private final ItemStack[] storedContents;
+    private final ItemStack[] storedArmor;
+    private final ItemStack storedOffHand;
+    private final double storedHealth;
+    private final int storedFoodLevel;
+    private final float storedSaturation;
+    private final int storedTotalExperience;
+    private final int storedLevel;
+    private final float storedExpProgress;
+    private final int storedFireTicks;
+    private final List<PotionEffect> storedPotionEffects;
 
     public LoadoutSnapshot(
         ItemStack[] contents,
@@ -33,61 +33,61 @@ public final class LoadoutSnapshot {
         int fireTicks,
         List<PotionEffect> potionEffects
     ) {
-        this.contents = cloneArray(contents);
-        this.armor = cloneArray(armor);
-        this.offHand = offHand == null ? null : offHand.clone();
-        this.health = health;
-        this.foodLevel = foodLevel;
-        this.saturation = saturation;
-        this.totalExperience = totalExperience;
-        this.level = level;
-        this.expProgress = expProgress;
-        this.fireTicks = fireTicks;
-        this.potionEffects = Collections.unmodifiableList(new ArrayList<>(potionEffects));
+        this.storedContents = cloneArray(contents);
+        this.storedArmor = cloneArray(armor);
+        this.storedOffHand = offHand == null ? null : offHand.clone();
+        this.storedHealth = health;
+        this.storedFoodLevel = foodLevel;
+        this.storedSaturation = saturation;
+        this.storedTotalExperience = totalExperience;
+        this.storedLevel = level;
+        this.storedExpProgress = expProgress;
+        this.storedFireTicks = fireTicks;
+        this.storedPotionEffects = Collections.unmodifiableList(new ArrayList<>(potionEffects));
     }
 
     public ItemStack[] contents() {
-        return cloneArray(contents);
+        return cloneArray(storedContents);
     }
 
     public ItemStack[] armor() {
-        return cloneArray(armor);
+        return cloneArray(storedArmor);
     }
 
     public ItemStack offHand() {
-        return offHand == null ? null : offHand.clone();
+        return storedOffHand == null ? null : storedOffHand.clone();
     }
 
     public double health() {
-        return health;
+        return storedHealth;
     }
 
     public int foodLevel() {
-        return foodLevel;
+        return storedFoodLevel;
     }
 
     public float saturation() {
-        return saturation;
+        return storedSaturation;
     }
 
     public int totalExperience() {
-        return totalExperience;
+        return storedTotalExperience;
     }
 
     public int level() {
-        return level;
+        return storedLevel;
     }
 
     public float expProgress() {
-        return expProgress;
+        return storedExpProgress;
     }
 
     public int fireTicks() {
-        return fireTicks;
+        return storedFireTicks;
     }
 
     public List<PotionEffect> potionEffects() {
-        return potionEffects;
+        return storedPotionEffects;
     }
 
     private static ItemStack[] cloneArray(ItemStack[] source) {

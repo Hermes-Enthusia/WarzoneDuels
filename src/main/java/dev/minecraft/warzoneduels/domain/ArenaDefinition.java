@@ -5,13 +5,13 @@ import org.bukkit.Location;
 import org.bukkit.World;
 
 public final class ArenaDefinition {
-    private final String worldName;
-    private final Location pos1;
-    private final Location pos2;
-    private final Location spawn1;
-    private final Location spawn2;
-    private final Location spectator;
-    private final Location exit;
+    private final String arenaWorldName;
+    private final Location firstCorner;
+    private final Location secondCorner;
+    private final Location firstSpawn;
+    private final Location secondSpawn;
+    private final Location spectatorLocation;
+    private final Location exitLocation;
 
     public ArenaDefinition(
         String worldName,
@@ -22,45 +22,45 @@ public final class ArenaDefinition {
         Location spectator,
         Location exit
     ) {
-        this.worldName = worldName;
-        this.pos1 = pos1.clone();
-        this.pos2 = pos2.clone();
-        this.spawn1 = spawn1.clone();
-        this.spawn2 = spawn2.clone();
-        this.spectator = spectator.clone();
-        this.exit = exit.clone();
+        this.arenaWorldName = worldName;
+        this.firstCorner = pos1.clone();
+        this.secondCorner = pos2.clone();
+        this.firstSpawn = spawn1.clone();
+        this.secondSpawn = spawn2.clone();
+        this.spectatorLocation = spectator.clone();
+        this.exitLocation = exit.clone();
     }
 
     public String worldName() {
-        return worldName;
+        return arenaWorldName;
     }
 
     public World world() {
-        return Bukkit.getWorld(worldName);
+        return Bukkit.getWorld(arenaWorldName);
     }
 
     public Location pos1() {
-        return pos1.clone();
+        return firstCorner.clone();
     }
 
     public Location pos2() {
-        return pos2.clone();
+        return secondCorner.clone();
     }
 
     public Location spawn1() {
-        return spawn1.clone();
+        return firstSpawn.clone();
     }
 
     public Location spawn2() {
-        return spawn2.clone();
+        return secondSpawn.clone();
     }
 
     public Location spectator() {
-        return spectator.clone();
+        return spectatorLocation.clone();
     }
 
     public Location exit() {
-        return exit.clone();
+        return exitLocation.clone();
     }
 
     public boolean isReady() {
@@ -71,15 +71,15 @@ public final class ArenaDefinition {
         if (location == null || location.getWorld() == null) {
             return false;
         }
-        if (!location.getWorld().getName().equalsIgnoreCase(worldName)) {
+        if (!location.getWorld().getName().equalsIgnoreCase(arenaWorldName)) {
             return false;
         }
-        int minX = Math.min(pos1.getBlockX(), pos2.getBlockX());
-        int maxX = Math.max(pos1.getBlockX(), pos2.getBlockX());
-        int minY = Math.min(pos1.getBlockY(), pos2.getBlockY());
-        int maxY = Math.max(pos1.getBlockY(), pos2.getBlockY());
-        int minZ = Math.min(pos1.getBlockZ(), pos2.getBlockZ());
-        int maxZ = Math.max(pos1.getBlockZ(), pos2.getBlockZ());
+        int minX = Math.min(firstCorner.getBlockX(), secondCorner.getBlockX());
+        int maxX = Math.max(firstCorner.getBlockX(), secondCorner.getBlockX());
+        int minY = Math.min(firstCorner.getBlockY(), secondCorner.getBlockY());
+        int maxY = Math.max(firstCorner.getBlockY(), secondCorner.getBlockY());
+        int minZ = Math.min(firstCorner.getBlockZ(), secondCorner.getBlockZ());
+        int maxZ = Math.max(firstCorner.getBlockZ(), secondCorner.getBlockZ());
         int x = location.getBlockX();
         int y = location.getBlockY();
         int z = location.getBlockZ();

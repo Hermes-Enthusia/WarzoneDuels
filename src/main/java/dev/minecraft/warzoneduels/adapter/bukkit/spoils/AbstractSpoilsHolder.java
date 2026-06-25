@@ -6,14 +6,14 @@ import org.bukkit.inventory.InventoryHolder;
 import java.util.UUID;
 
 public abstract class AbstractSpoilsHolder implements InventoryHolder {
-    private final UUID ownerId;
+    private final UUID ownerUuid;
 
     protected AbstractSpoilsHolder(UUID ownerId) {
-        this.ownerId = ownerId;
+        this.ownerUuid = ownerId;
     }
 
     public UUID ownerId() {
-        return ownerId;
+        return ownerUuid;
     }
 
     @Override

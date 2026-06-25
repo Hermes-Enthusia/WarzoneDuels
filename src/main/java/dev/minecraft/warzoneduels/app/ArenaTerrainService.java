@@ -40,7 +40,7 @@ public final class ArenaTerrainService {
     private final File dirtyMarkerFile;
 
     private ExecutorService ioExecutor;
-    private ArenaFootprint footprint;
+    private ArenaFootprint arenaFootprint;
     private String footprintFile = "arena-footprint.yml";
     private String mapsDirectory = "maps";
     private int captureBlocksPerTick = 900;
@@ -48,7 +48,7 @@ public final class ArenaTerrainService {
     private boolean restoreDefaultOnStartup = true;
     private boolean disabled;
     private TerrainOperation operation;
-    private ArenaMapOperationStatus status = ArenaMapOperationStatus.idle("flat_arena");
+    private ArenaMapOperationStatus operationStatus = ArenaMapOperationStatus.idle("flat_arena");
     private final Map<String, ArenaMapSnapshot> snapshotCache = new HashMap<>();
 
     public ArenaTerrainService(
@@ -81,7 +81,7 @@ public final class ArenaTerrainService {
                 operation.task.cancel();
             }
             operation = null;
-            status = ArenaMapOperationStatus.idle(arenaMapService.currentArenaMapId());
+            operationStatus = ArenaMapOperationStatus.idle(arenaMapService.currentArenaMapId());
             snapshotCache.clear();
         }
         if (ioExecutor != null) {
@@ -100,12 +100,12 @@ public final class ArenaTerrainService {
             return;
         }
         footprintStore.ensureBundledDefault(footprintFile);
-        footprint = footprintStore.load(footprintFile);
-        status = ArenaMapOperationStatus.idle(arenaMapService.currentArenaMapId());
+        arenaFootprint = footprintStore.load(footprintFile);
+        operationStatus = ArenaMapOperationStatus.idle(arenaMapService.currentArenaMapId());
         synchronized (operationLock) {
             snapshotCache.clear();
         }
-        if (footprint == null || footprint.isEmpty()) {
+        if (arenaFootprint == null || arenaFootprint.isEmpty()) {
             plugin.getLogger().warning("Arena terrain footprint could not be loaded from " + footprintFile + ".");
             return;
         }
@@ -119,28 +119,28 @@ public final class ArenaTerrainService {
     }
 
     public boolean isReady() {
-        return footprint != null && !footprint.isEmpty();
+        return arenaFootprint != null && !arenaFootprint.isEmpty();
     }
 
     public ArenaFootprint footprint() {
-        return footprint;
+        return arenaFootprint;
     }
 
     public boolean containsFootprintBlock(Location location) {
-        if (location == null || location.getWorld() == null || footprint == null) {
+        if (location == null || location.getWorld() == null || arenaFootprint == null) {
             return false;
         }
-        if (!location.getWorld().getName().equalsIgnoreCase(footprint.worldName())) {
+        if (!location.getWorld().getName().equalsIgnoreCase(arenaFootprint.worldName())) {
             return false;
         }
-        return footprint.contains(location.getBlockX(), location.getBlockY(), location.getBlockZ());
+        return arenaFootprint.contains(location.getBlockX(), location.getBlockY(), location.getBlockZ());
     }
 
     public boolean isNearFootprint(Location location, int radius) {
-        if (location == null || location.getWorld() == null || footprint == null) {
+        if (location == null || location.getWorld() == null || arenaFootprint == null) {
             return false;
         }
-        if (!location.getWorld().getName().equalsIgnoreCase(footprint.worldName())) {
+        if (!location.getWorld().getName().equalsIgnoreCase(arenaFootprint.worldName())) {
             return false;
         }
 
@@ -148,16 +148,16 @@ public final class ArenaTerrainService {
         int centerX = location.getBlockX();
         int centerY = location.getBlockY();
         int centerZ = location.getBlockZ();
-        if (centerX < footprint.minX() - safeRadius || centerX > footprint.maxX() + safeRadius
-            || centerY < footprint.minY() - safeRadius || centerY > footprint.maxY() + safeRadius
-            || centerZ < footprint.minZ() - safeRadius || centerZ > footprint.maxZ() + safeRadius) {
+        if (centerX < arenaFootprint.minX() - safeRadius || centerX > arenaFootprint.maxX() + safeRadius
+            || centerY < arenaFootprint.minY() - safeRadius || centerY > arenaFootprint.maxY() + safeRadius
+            || centerZ < arenaFootprint.minZ() - safeRadius || centerZ > arenaFootprint.maxZ() + safeRadius) {
             return false;
         }
 
         for (int x = centerX - safeRadius; x <= centerX + safeRadius; x++) {
             for (int y = centerY - safeRadius; y <= centerY + safeRadius; y++) {
                 for (int z = centerZ - safeRadius; z <= centerZ + safeRadius; z++) {
-                    if (footprint.contains(x, y, z)) {
+                    if (arenaFootprint.contains(x, y, z)) {
                         return true;
                     }
                 }
@@ -167,24 +167,24 @@ public final class ArenaTerrainService {
     }
 
     public boolean isWithinFootprintColumn(Location location, int verticalRadius) {
-        if (location == null || location.getWorld() == null || footprint == null) {
+        if (location == null || location.getWorld() == null || arenaFootprint == null) {
             return false;
         }
-        if (!location.getWorld().getName().equalsIgnoreCase(footprint.worldName())) {
+        if (!location.getWorld().getName().equalsIgnoreCase(arenaFootprint.worldName())) {
             return false;
         }
 
         int x = location.getBlockX();
         int z = location.getBlockZ();
-        if (x < footprint.minX() || x > footprint.maxX() || z < footprint.minZ() || z > footprint.maxZ()) {
+        if (x < arenaFootprint.minX() || x > arenaFootprint.maxX() || z < arenaFootprint.minZ() || z > arenaFootprint.maxZ()) {
             return false;
         }
 
         int radius = Math.max(0, verticalRadius);
-        int minY = Math.max(footprint.minY(), location.getBlockY() - radius);
-        int maxY = Math.min(footprint.maxY(), location.getBlockY() + radius);
+        int minY = Math.max(arenaFootprint.minY(), location.getBlockY() - radius);
+        int maxY = Math.min(arenaFootprint.maxY(), location.getBlockY() + radius);
         for (int y = minY; y <= maxY; y++) {
-            if (footprint.contains(x, y, z)) {
+            if (arenaFootprint.contains(x, y, z)) {
                 return true;
             }
         }
@@ -192,14 +192,14 @@ public final class ArenaTerrainService {
     }
 
     public Location findPlayableLocation(Location preferred) {
-        if (footprint == null || footprint.isEmpty()) {
+        if (arenaFootprint == null || arenaFootprint.isEmpty()) {
             return null;
         }
         World world = resolveFootprintWorld();
         if (world == null) {
             return null;
         }
-        List<FootprintBlock> blocks = footprint.orderedBlocks();
+        List<FootprintBlock> blocks = arenaFootprint.orderedBlocks();
         if (blocks.isEmpty()) {
             return null;
         }
@@ -217,7 +217,7 @@ public final class ArenaTerrainService {
 
     public ArenaMapOperationStatus status() {
         synchronized (operationLock) {
-            return status;
+            return operationStatus;
         }
     }
 
@@ -247,7 +247,7 @@ public final class ArenaTerrainService {
             return;
         }
 
-        List<FootprintBlock> blocks = footprint.orderedBlocks();
+        List<FootprintBlock> blocks = arenaFootprint.orderedBlocks();
         List<String> blockData = new ArrayList<>(blocks.size());
         AtomicInteger index = new AtomicInteger();
         BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
@@ -342,7 +342,7 @@ public final class ArenaTerrainService {
             return;
         }
 
-        List<FootprintBlock> blocks = footprint.orderedBlocks();
+        List<FootprintBlock> blocks = arenaFootprint.orderedBlocks();
         List<String> entries = snapshot.blockDataEntries();
         List<Integer> orderedIndices = buildRestoreOrder(entries);
         AtomicInteger index = new AtomicInteger();
@@ -402,15 +402,15 @@ public final class ArenaTerrainService {
             failActiveOperation("Terrain snapshot could not be loaded.", failure);
             return false;
         }
-        if (footprint == null) {
+        if (arenaFootprint == null) {
             failActiveOperation("Arena footprint is not loaded.", failure);
             return false;
         }
-        if (!snapshot.worldName().equalsIgnoreCase(footprint.worldName())) {
+        if (!snapshot.worldName().equalsIgnoreCase(arenaFootprint.worldName())) {
             failActiveOperation("Terrain snapshot world does not match the configured arena world.", failure);
             return false;
         }
-        int footprintSize = footprint.orderedBlocks().size();
+        int footprintSize = arenaFootprint.orderedBlocks().size();
         if (snapshot.footprintBlockCount() != footprintSize || snapshot.blockDataEntries().size() != footprintSize) {
             failActiveOperation("Terrain snapshot footprint does not match the configured arena footprint.", failure);
             return false;
@@ -452,10 +452,10 @@ public final class ArenaTerrainService {
     }
 
     private World resolveFootprintWorld() {
-        if (footprint == null || footprint.worldName() == null || footprint.worldName().isBlank()) {
+        if (arenaFootprint == null || arenaFootprint.worldName() == null || arenaFootprint.worldName().isBlank()) {
             return null;
         }
-        return Bukkit.getWorld(footprint.worldName());
+        return Bukkit.getWorld(arenaFootprint.worldName());
     }
 
     private Location playableLocationAt(World world, FootprintBlock block, Location preferred) {
@@ -494,7 +494,7 @@ public final class ArenaTerrainService {
                 return false;
             }
             operation = new TerrainOperation(type, mapId);
-            status = new ArenaMapOperationStatus(true, type, mapId, 0L, footprint.orderedBlocks().size());
+            operationStatus = new ArenaMapOperationStatus(true, type, mapId, 0L, arenaFootprint.orderedBlocks().size());
             return true;
         }
     }
@@ -512,7 +512,7 @@ public final class ArenaTerrainService {
     private void updateProgress(long processedBlocks, long totalBlocks) {
         synchronized (operationLock) {
             if (operation != null) {
-                status = new ArenaMapOperationStatus(true, operation.type, operation.mapId, processedBlocks, totalBlocks);
+                operationStatus = new ArenaMapOperationStatus(true, operation.type, operation.mapId, processedBlocks, totalBlocks);
             }
         }
     }
@@ -549,7 +549,7 @@ public final class ArenaTerrainService {
         synchronized (operationLock) {
             TerrainOperation previous = operation;
             operation = null;
-            status = ArenaMapOperationStatus.idle(arenaMapService.currentArenaMapId());
+            operationStatus = ArenaMapOperationStatus.idle(arenaMapService.currentArenaMapId());
             return previous;
         }
     }
@@ -603,7 +603,7 @@ public final class ArenaTerrainService {
         List<Integer> dependent = new ArrayList<>();
         List<Integer> gravity = new ArrayList<>();
 
-        List<FootprintBlock> blocks = footprint.orderedBlocks();
+        List<FootprintBlock> blocks = arenaFootprint.orderedBlocks();
         for (int i = 0; i < entries.size(); i++) {
             String rawData = entries.get(i);
             Material material = parseMaterial(rawData);

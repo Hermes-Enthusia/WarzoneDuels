@@ -8,48 +8,48 @@ import java.util.Set;
 import java.util.UUID;
 
 public final class ActiveDuel {
-    private final MatchParticipant participantOne;
-    private final MatchParticipant participantTwo;
-    private final DuelSettings settings;
-    private final long startedAtEpochMs;
-    private final Set<BlockKey> placedBlocks = new HashSet<>();
-    private ArenaSnapshot arenaSnapshot;
+    private final MatchParticipant firstParticipant;
+    private final MatchParticipant secondParticipant;
+    private final DuelSettings duelSettings;
+    private final long startedAtMillis;
+    private final Set<BlockKey> placedBlockKeys = new HashSet<>();
+    private ArenaSnapshot currentArenaSnapshot;
     private boolean wagerHeld;
     private double wagerPot;
 
     public ActiveDuel(MatchParticipant participantOne, MatchParticipant participantTwo, DuelSettings settings, long startedAtEpochMs) {
-        this.participantOne = participantOne;
-        this.participantTwo = participantTwo;
-        this.settings = settings;
-        this.startedAtEpochMs = startedAtEpochMs;
+        this.firstParticipant = participantOne;
+        this.secondParticipant = participantTwo;
+        this.duelSettings = settings;
+        this.startedAtMillis = startedAtEpochMs;
     }
 
     public MatchParticipant participantOne() {
-        return participantOne;
+        return firstParticipant;
     }
 
     public MatchParticipant participantTwo() {
-        return participantTwo;
+        return secondParticipant;
     }
 
     public DuelSettings settings() {
-        return settings;
+        return duelSettings;
     }
 
     public long startedAtEpochMs() {
-        return startedAtEpochMs;
+        return startedAtMillis;
     }
 
     public Set<BlockKey> placedBlocks() {
-        return placedBlocks;
+        return placedBlockKeys;
     }
 
     public ArenaSnapshot arenaSnapshot() {
-        return arenaSnapshot;
+        return currentArenaSnapshot;
     }
 
     public void setArenaSnapshot(ArenaSnapshot arenaSnapshot) {
-        this.arenaSnapshot = arenaSnapshot;
+        this.currentArenaSnapshot = arenaSnapshot;
     }
 
     public boolean isWagerHeld() {
@@ -69,25 +69,25 @@ public final class ActiveDuel {
     }
 
     public boolean contains(UUID playerId) {
-        return participantOne.playerId().equals(playerId) || participantTwo.playerId().equals(playerId);
+        return firstParticipant.playerId().equals(playerId) || secondParticipant.playerId().equals(playerId);
     }
 
     public MatchParticipant participant(UUID playerId) {
-        if (participantOne.playerId().equals(playerId)) {
-            return participantOne;
+        if (firstParticipant.playerId().equals(playerId)) {
+            return firstParticipant;
         }
-        if (participantTwo.playerId().equals(playerId)) {
-            return participantTwo;
+        if (secondParticipant.playerId().equals(playerId)) {
+            return secondParticipant;
         }
         return null;
     }
 
     public MatchParticipant other(UUID playerId) {
-        if (participantOne.playerId().equals(playerId)) {
-            return participantTwo;
+        if (firstParticipant.playerId().equals(playerId)) {
+            return secondParticipant;
         }
-        if (participantTwo.playerId().equals(playerId)) {
-            return participantOne;
+        if (secondParticipant.playerId().equals(playerId)) {
+            return firstParticipant;
         }
         return null;
     }

@@ -6,6 +6,7 @@ import org.bukkit.Location;
 import org.bukkit.plugin.Plugin;
 
 import java.lang.reflect.Method;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class EnthusiaSpawnPort implements SpawnPort {
@@ -55,7 +56,9 @@ public final class EnthusiaSpawnPort implements SpawnPort {
                 return resolved.clone();
             }
         } catch (ReflectiveOperationException ex) {
-            logger.warning("Failed to resolve spawn from EnthusiaTeleport, falling back to config: " + ex.getMessage());
+            if (logger.isLoggable(Level.WARNING)) {
+                logger.warning("Failed to resolve spawn from EnthusiaTeleport, falling back to config: " + ex.getMessage());
+            }
         }
         return null;
     }

@@ -4,24 +4,24 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 
 public final class GuiHolder implements InventoryHolder {
-    private final GuiType type;
-    private final boolean returnToConfirm;
+    private final GuiType holderType;
+    private final boolean shouldReturnToConfirm;
 
     public GuiHolder(GuiType type) {
         this(type, false);
     }
 
     public GuiHolder(GuiType type, boolean returnToConfirm) {
-        this.type = type;
-        this.returnToConfirm = returnToConfirm;
+        this.holderType = type;
+        this.shouldReturnToConfirm = returnToConfirm;
     }
 
     public GuiType type() {
-        return type;
+        return holderType;
     }
 
     public boolean returnToConfirm() {
-        return returnToConfirm;
+        return shouldReturnToConfirm;
     }
 
     @Override
