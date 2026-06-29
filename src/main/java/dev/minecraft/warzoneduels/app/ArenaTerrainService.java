@@ -166,6 +166,21 @@ public final class ArenaTerrainService {
         return false;
     }
 
+    public boolean isOnOrInsideFootprintBlock(Location location) {
+        if (location == null || location.getWorld() == null || arenaFootprint == null) {
+            return false;
+        }
+        if (!location.getWorld().getName().equalsIgnoreCase(arenaFootprint.worldName())) {
+            return false;
+        }
+
+        int x = location.getBlockX();
+        int feetY = location.getBlockY();
+        int z = location.getBlockZ();
+        return arenaFootprint.contains(x, feetY, z)
+            || arenaFootprint.contains(x, feetY - 1, z);
+    }
+
     public boolean isWithinFootprintColumn(Location location, int verticalRadius) {
         if (location == null || location.getWorld() == null || arenaFootprint == null) {
             return false;

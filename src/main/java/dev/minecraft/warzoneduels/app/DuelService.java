@@ -541,11 +541,11 @@ public final class DuelService {
     public void watchDuel(Player player) {
         requirePrimaryThread();
         if (activeDuel == null) {
-            sendMessage(player, "messages.duel-watch-unavailable");
+            sendMessageOrFallback(player, "messages.duel-watch-unavailable", ChatColor.RED + "There is no active duel to watch.");
             return;
         }
         if (isInActiveDuel(player.getUniqueId())) {
-            sendMessage(player, "messages.duel-watch-participant");
+            sendMessageOrFallback(player, "messages.duel-watch-participant", ChatColor.RED + "You are already participating in this duel.");
             return;
         }
         if (blockCombatEntry && combatTagPort != null && combatTagPort.isInCombat(player)) {
@@ -553,7 +553,7 @@ public final class DuelService {
             return;
         }
         teleportSafe(player, arena.spectator());
-        sendMessage(player, "messages.duel-watch-teleported");
+        sendMessageOrFallback(player, "messages.duel-watch-teleported", ChatColor.GREEN + "Warped to the arena stands.");
     }
 
     public void reloadFromCommand(CommandSender sender) {
@@ -745,6 +745,10 @@ public final class DuelService {
     public void handleUnauthorizedArenaEntry(Player player) {
         requirePrimaryThread();
         teleportToExit(player);
+        sendArenaEntryBlockedMessage(player);
+    }
+
+    public void sendArenaEntryBlockedMessage(Player player) {
         String message = plugin.getConfig().getString("messages.arena-entry-blocked", "");
         if (message == null || message.isBlank()) {
             sendMessageRaw(player, ChatColor.RED + "Only active duel participants may enter the fighting area.");
@@ -960,7 +964,7 @@ public final class DuelService {
         if (isInActiveDuel(player.getUniqueId())) {
             return false;
         }
-        return arenaTerrainService.isNearFootprint(to, 1);
+        return arenaTerrainService.isOnOrInsideFootprintBlock(to);
     }
 
     public boolean isNearArenaTerrain(Location location, int radius) {
@@ -1802,6 +1806,18 @@ public final class DuelService {
         }
         for (int i = 0; i + 1 < replacements.length; i += 2) {
             message = message.replace(replacements[i], replacements[i + 1]);
+        }
+        sendMessageRaw(player, color(message));
+    }
+
+    private void sendMessageOrFallback(Player player, String path, String fallback) {
+        if (player == null) {
+            return;
+        }
+        String message = plugin.getConfig().getString(path, "");
+        if (message == null || message.isBlank()) {
+            sendMessageRaw(player, fallback);
+            return;
         }
         sendMessageRaw(player, color(message));
     }

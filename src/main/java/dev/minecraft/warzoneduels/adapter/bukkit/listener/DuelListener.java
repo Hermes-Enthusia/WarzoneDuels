@@ -529,7 +529,7 @@ public final class DuelListener implements Listener {
         Location to = event.getTo();
         if (duelService.shouldBlockArenaFootprintEntry(event.getPlayer(), to)) {
             event.setTo(event.getFrom());
-            duelService.handleUnauthorizedArenaEntry(event.getPlayer());
+            duelService.sendArenaEntryBlockedMessage(event.getPlayer());
             return;
         }
         if (duelService.shouldBlockArenaShellEntry(event.getPlayer(), event.getFrom(), to)) {
@@ -580,14 +580,14 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onTeleport(PlayerTeleportEvent event) {
+        if (duelService.isTeleportAllowed(event.getPlayer().getUniqueId())) {
+            return;
+        }
         if (!duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
             if (duelService.shouldBlockArenaFootprintEntry(event.getPlayer(), event.getTo())) {
                 event.setCancelled(true);
                 duelService.sendMessage(event.getPlayer(), "messages.arena-entry-blocked");
             }
-            return;
-        }
-        if (duelService.isTeleportAllowed(event.getPlayer().getUniqueId())) {
             return;
         }
         if (event.getCause() == TeleportCause.ENDER_PEARL && !duelService.isCombatItemEnabled(Material.ENDER_PEARL, event.getPlayer())) {
