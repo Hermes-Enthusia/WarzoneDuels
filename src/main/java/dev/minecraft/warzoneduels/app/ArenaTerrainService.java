@@ -31,6 +31,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
+@SuppressWarnings("PMD.DoNotUseThreads")
 public final class ArenaTerrainService {
     private final WarzoneDuelsPlugin plugin;
     private final ArenaMapService arenaMapService;

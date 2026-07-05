@@ -24,6 +24,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
+@SuppressWarnings("PMD.DoNotUseThreads")
 public final class SpoilsStore {
     private final WarzoneDuelsPlugin plugin;
     private final File file;

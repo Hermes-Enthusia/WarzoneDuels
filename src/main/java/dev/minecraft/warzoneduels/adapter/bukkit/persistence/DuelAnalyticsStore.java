@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+@SuppressWarnings("PMD.AvoidSynchronizedAtMethodLevel")
 public final class DuelAnalyticsStore {
     private final WarzoneDuelsPlugin plugin;
     private final File databaseFile;
