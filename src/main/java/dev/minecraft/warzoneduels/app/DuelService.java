@@ -75,6 +75,8 @@ public final class DuelService {
     private static final String MSG_CANNOT_AFFORD = "messages.cannot-afford";
     private static final String MSG_NO_PENDING_REQUEST = "messages.no-pending-request";
     private static final String PERMISSION_BYPASS_ENTER = "warzoneduels.bypass.enter";
+    private static final String PLAYER_PLACEHOLDER = "{player}";
+    private static final double NO_WAGER = 0D;
 
     private final WarzoneDuelsPlugin plugin;
     private final EconomyPort economyPort;
@@ -372,7 +374,7 @@ public final class DuelService {
             return true;
         }
         if (isCombatTagged(target)) {
-            sendMessage(sender, MSG_TARGET_IN_COMBAT, "{player}", target.getName());
+            sendMessage(sender, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, target.getName());
             return true;
         }
         return false;
@@ -422,7 +424,7 @@ public final class DuelService {
             System.currentTimeMillis()
         );
         builders.remove(requester.getUniqueId());
-        sendMessage(requester, "messages.request-sent", "{player}", target.getName());
+        sendMessage(requester, "messages.request-sent", PLAYER_PLACEHOLDER, target.getName());
         sendRequestDetails(target, pendingRequest);
         scheduleRequestExpiry();
     }
@@ -433,7 +435,7 @@ public final class DuelService {
             return true;
         }
         if (isCombatTagged(target)) {
-            sendMessage(requester, MSG_TARGET_IN_COMBAT, "{player}", target.getName());
+            sendMessage(requester, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, target.getName());
             return true;
         }
         if (!isInsideMatchmakingSpawn(requester.getLocation()) || !isInsideMatchmakingSpawn(target.getLocation())) {
@@ -456,11 +458,11 @@ public final class DuelService {
             return true;
         }
         if (!economyPort.has(requester, settings.getWager())) {
-            sendMessage(requester, MSG_CANNOT_AFFORD, "{player}", requester.getName());
+            sendMessage(requester, MSG_CANNOT_AFFORD, PLAYER_PLACEHOLDER, requester.getName());
             return true;
         }
         if (!economyPort.has(target, settings.getWager())) {
-            sendMessage(requester, MSG_CANNOT_AFFORD, "{player}", target.getName());
+            sendMessage(requester, MSG_CANNOT_AFFORD, PLAYER_PLACEHOLDER, target.getName());
             return true;
         }
         return false;
@@ -494,14 +496,14 @@ public final class DuelService {
         if (isCombatTagged(requester)) {
             clearPendingRequest();
             sendMessage(requester, MSG_PLAYER_IN_COMBAT);
-            sendMessage(target, MSG_TARGET_IN_COMBAT, "{player}", requester.getName());
+            sendMessage(target, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, requester.getName());
             return;
         }
         if (isCombatTagged(target)) {
             clearPendingRequest();
             sendMessage(target, MSG_PLAYER_IN_COMBAT);
             if (requester != null) {
-                sendMessage(requester, MSG_TARGET_IN_COMBAT, "{player}", target.getName());
+                sendMessage(requester, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, target.getName());
             }
             return;
         }
@@ -512,7 +514,7 @@ public final class DuelService {
             return;
         }
         DuelSettings settings = pendingRequest.settings();
-        if (settings.getWager() > 0D) {
+        if (settings.getWager() > NO_WAGER) {
             if (!economyPort.isEnabled()) {
                 clearPendingRequest();
                 sendMessage(target, "messages.wager-disabled");
@@ -520,12 +522,12 @@ public final class DuelService {
             }
             if (!economyPort.has(requester, settings.getWager())) {
                 clearPendingRequest();
-                sendMessage(target, MSG_CANNOT_AFFORD, "{player}", requester.getName());
+                sendMessage(target, MSG_CANNOT_AFFORD, PLAYER_PLACEHOLDER, requester.getName());
                 return;
             }
             if (!economyPort.has(target, settings.getWager())) {
                 clearPendingRequest();
-                sendMessage(target, MSG_CANNOT_AFFORD, "{player}", target.getName());
+                sendMessage(target, MSG_CANNOT_AFFORD, PLAYER_PLACEHOLDER, target.getName());
                 return;
             }
         }
@@ -583,7 +585,7 @@ public final class DuelService {
             return;
         }
         participant.setDrawRequested(true);
-        sendToParticipants("messages.draw-requested", "{player}", player.getName());
+        sendToParticipants("messages.draw-requested", PLAYER_PLACEHOLDER, player.getName());
         if (activeDuel.participantOne().drawRequested() && activeDuel.participantTwo().drawRequested()) {
             concludeDuel(null, DuelEndReason.DRAW, true);
             return;
@@ -725,7 +727,7 @@ public final class DuelService {
         }
         disconnectSnapshots.put(player.getUniqueId(), loadoutArchiveStore.capture(player));
         participant.setDisconnectDeadlineEpochMs(System.currentTimeMillis() + (disconnectGraceSeconds * 1000L));
-        sendToParticipants("messages.disconnect-grace", "{player}", participant.name(), "{seconds}", String.valueOf(disconnectGraceSeconds));
+        sendToParticipants("messages.disconnect-grace", PLAYER_PLACEHOLDER, participant.name(), "{seconds}", String.valueOf(disconnectGraceSeconds));
         startDisconnectMonitor();
         runtimeStateStore.queueActiveDuelSave(activeDuel);
     }
@@ -1436,9 +1438,9 @@ public final class DuelService {
         loadoutArchiveStore.saveLatestPreDuel(requester, loadoutArchiveStore.capture(requester));
         loadoutArchiveStore.saveLatestPreDuel(target, loadoutArchiveStore.capture(target));
 
-        if (preparedSettings.getWager() > 0D && !holdWager(stagedDuel, requester, target, preparedSettings.getWager())) {
-            sendMessage(requester, MSG_CANNOT_AFFORD, "{player}", target.getName());
-            sendMessage(target, MSG_CANNOT_AFFORD, "{player}", requester.getName());
+        if (preparedSettings.getWager() > NO_WAGER && !holdWager(stagedDuel, requester, target, preparedSettings.getWager())) {
+            sendMessage(requester, MSG_CANNOT_AFFORD, PLAYER_PLACEHOLDER, target.getName());
+            sendMessage(target, MSG_CANNOT_AFFORD, PLAYER_PLACEHOLDER, requester.getName());
             return;
         }
 
@@ -1467,7 +1469,7 @@ public final class DuelService {
             sendMessage(target, "messages.duel-risk-warning");
             sendMessageRaw(requester, ChatColor.RED + "Disconnecting gives you " + disconnectGraceSeconds + " seconds to rejoin before you lose.");
             sendMessageRaw(target, ChatColor.RED + "Disconnecting gives you " + disconnectGraceSeconds + " seconds to rejoin before you lose.");
-            String wagerText = preparedSettings.getWager() > 0D ? " for $" + formatAmount(preparedSettings.getWager()) : "";
+            String wagerText = preparedSettings.getWager() > NO_WAGER ? " for $" + formatAmount(preparedSettings.getWager()) : "";
             broadcast("messages.duel-start", "{p1}", requester.getName(), "{p2}", target.getName(), "{wager}", wagerText);
             broadcastWatchPrompt(requester.getUniqueId(), target.getUniqueId());
             runtimeStateStore.queueActiveDuelSave(activeDuel, 1L);
@@ -1497,7 +1499,7 @@ public final class DuelService {
         if (winner != null) {
             payoutWager(winner);
             if (broadcastOutcome) {
-                String wagerText = finishedDuel.settings().getWager() > 0D ? " for $" + formatAmount(finishedDuel.settings().getWager()) : "";
+                String wagerText = finishedDuel.settings().getWager() > NO_WAGER ? " for $" + formatAmount(finishedDuel.settings().getWager()) : "";
                 broadcast("messages.duel-end", "{winner}", winner.getName(), "{wager}", wagerText);
             }
         } else {
@@ -1719,7 +1721,7 @@ public final class DuelService {
             String targetName = pendingRequest.targetName();
             clearPendingRequest();
             if (requester != null) {
-                sendMessage(requester, "messages.request-expired", "{player}", targetName);
+                sendMessage(requester, "messages.request-expired", PLAYER_PLACEHOLDER, targetName);
             }
         }, requestExpireSeconds * 20L);
     }
@@ -1757,7 +1759,7 @@ public final class DuelService {
             }
             spoilsService.markForcedDeathOnJoin(expired.playerId());
             if (winnerPlayer != null) {
-                sendToParticipants("messages.disconnect-loss", "{player}", expired.name());
+                sendToParticipants("messages.disconnect-loss", PLAYER_PLACEHOLDER, expired.name());
             }
             concludeDuel(winnerPlayer, DuelEndReason.DISCONNECT_TIMEOUT, true);
         }, 20L, 20L);
@@ -1901,7 +1903,7 @@ public final class DuelService {
         if (activeDuel == null || !activeDuel.isWagerHeld()) {
             return;
         }
-        if (activeDuel.getWagerPot() > 0D) {
+        if (activeDuel.getWagerPot() > NO_WAGER) {
             economyPort.deposit(winner, activeDuel.getWagerPot());
         }
         activeDuel.setWagerHeld(false);
@@ -1985,7 +1987,7 @@ public final class DuelService {
     }
 
     private void sendRequestDetails(Player target, DuelRequest request) {
-        sendMessage(target, "messages.request-received", "{player}", request.requesterName());
+        sendMessage(target, "messages.request-received", PLAYER_PLACEHOLDER, request.requesterName());
         target.sendMessage(
             Component.text("[Review Request] ", NamedTextColor.GOLD)
                 .clickEvent(ClickEvent.runCommand("/duel review"))
@@ -2210,10 +2212,10 @@ public final class DuelService {
             if (isCombatTagged(requester) || isCombatTagged(target)) {
                 if (isCombatTagged(requester)) {
                     sendMessage(requester, MSG_PLAYER_IN_COMBAT);
-                    sendMessage(target, MSG_TARGET_IN_COMBAT, "{player}", requester.getName());
+                sendMessage(target, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, requester.getName());
                 } else {
                     sendMessage(target, MSG_PLAYER_IN_COMBAT);
-                    sendMessage(requester, MSG_TARGET_IN_COMBAT, "{player}", target.getName());
+                    sendMessage(requester, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, target.getName());
                 }
                 clearQueuedDuelStart();
                 return;
