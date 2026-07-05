@@ -74,6 +74,7 @@ public final class DuelService {
     private static final String MSG_TARGET_OFFLINE = "messages.target-offline";
     private static final String MSG_CANNOT_AFFORD = "messages.cannot-afford";
     private static final String MSG_NO_PENDING_REQUEST = "messages.no-pending-request";
+    private static final String PERMISSION_BYPASS_BUILD = "warzoneduels.bypass.build";
     private static final String PERMISSION_BYPASS_ENTER = "warzoneduels.bypass.enter";
     private static final String PLAYER_PLACEHOLDER = "{player}";
     private static final double NO_WAGER = 0D;
@@ -913,53 +914,71 @@ public final class DuelService {
     }
 
     public boolean isBlockBreakAllowed(Block block, Player player) {
-        if (player != null && player.hasPermission("warzoneduels.bypass.build")) {
+        if (hasBuildBypass(player)) {
             return true;
         }
-        if (arena != null && arena.contains(block.getLocation()) && activeDuel == null) {
+        Location location = block.getLocation();
+        if (isIdleArenaBlock(location)) {
             return false;
         }
         if (activeDuel == null) {
             return true;
         }
         boolean participant = isInActiveDuel(player.getUniqueId());
-        if (!arena.contains(block.getLocation())) {
+        if (!arena.contains(location)) {
             return !participant;
         }
         if (!participant) {
             return false;
         }
+        return canParticipantBreakArenaBlock(location);
+    }
+
+    private boolean hasBuildBypass(Player player) {
+        return player != null && player.hasPermission(PERMISSION_BYPASS_BUILD);
+    }
+
+    private boolean isIdleArenaBlock(Location location) {
+        return arena != null && arena.contains(location) && activeDuel == null;
+    }
+
+    private boolean canParticipantBreakArenaBlock(Location location) {
         DuelSettings settings = activeDuel.settings();
-        BlockKey blockKey = BlockKey.fromLocation(block.getLocation());
+        BlockKey blockKey = BlockKey.fromLocation(location);
         if (activeDuel.placedBlocks().contains(blockKey)) {
             return true;
         }
         if (settings.getPlaceBreakMode() == DuelSettings.PlaceBreakMode.PLACE_BREAK) {
-            return settings.isMapSupportsBlockBreaking() && isArenaTerrainBlock(block.getLocation());
+            return settings.isMapSupportsBlockBreaking() && isArenaTerrainBlock(location);
         }
         return false;
     }
 
     public boolean isBlockPlaceAllowed(Block block, Material itemType, Player player) {
-        if (player != null && player.hasPermission("warzoneduels.bypass.build")) {
+        if (hasBuildBypass(player)) {
             return true;
         }
-        if (arena != null && arena.contains(block.getLocation()) && activeDuel == null) {
+        Location location = block.getLocation();
+        if (isIdleArenaBlock(location)) {
             return false;
         }
         if (activeDuel == null) {
             return true;
         }
         boolean participant = isInActiveDuel(player.getUniqueId());
-        if (!arena.contains(block.getLocation())) {
+        if (!arena.contains(location)) {
             return !participant;
         }
         if (!participant) {
             return false;
         }
-        if (!arenaTerrainService.containsFootprintBlock(block.getLocation())) {
+        if (!arenaTerrainService.containsFootprintBlock(location)) {
             return false;
         }
+        return canParticipantPlaceArenaBlock(itemType);
+    }
+
+    private boolean canParticipantPlaceArenaBlock(Material itemType) {
         DuelSettings settings = activeDuel.settings();
         if (settings.getPlaceBreakMode() == DuelSettings.PlaceBreakMode.NONE) {
             return false;
@@ -1242,35 +1261,25 @@ public final class DuelService {
     }
 
     public boolean canUseCombatItem(Material material, Player actor) {
-        if (activeDuel == null) {
-            return true;
-        }
-        if (!isInActiveDuel(actor.getUniqueId())) {
+        if (activeDuel == null || !isInActiveDuel(actor.getUniqueId())) {
             return true;
         }
         if (duelCountdownActive) {
             return false;
         }
-        DuelSettings settings = activeDuel.settings();
-        if (SpearUtil.isSpear(material)) {
-            return settings.isAllowSpears();
-        }
-        return switch (material) {
-            case ENDER_PEARL -> settings.isAllowEnderPearls() && !actor.hasCooldown(Material.ENDER_PEARL);
-            case WIND_CHARGE -> settings.isAllowWindCharges() && !actor.hasCooldown(Material.WIND_CHARGE);
-            case CHORUS_FRUIT -> settings.isAllowChorusFruit();
-            case MACE -> settings.isAllowMaces();
-            case ELYTRA -> settings.isAllowElytras();
-            case BRUSH -> false;
-            default -> true;
-        };
+        return material != Material.BRUSH
+            && isCombatItemEnabledForSettings(material, activeDuel.settings())
+            && isCombatItemOffCooldown(material, actor);
     }
 
     public boolean isCombatItemEnabled(Material material, Player actor) {
         if (activeDuel == null || !isInActiveDuel(actor.getUniqueId())) {
             return true;
         }
-        DuelSettings settings = activeDuel.settings();
+        return isCombatItemEnabledForSettings(material, activeDuel.settings());
+    }
+
+    private boolean isCombatItemEnabledForSettings(Material material, DuelSettings settings) {
         if (SpearUtil.isSpear(material)) {
             return settings.isAllowSpears();
         }
@@ -1280,6 +1289,14 @@ public final class DuelService {
             case CHORUS_FRUIT -> settings.isAllowChorusFruit();
             case MACE -> settings.isAllowMaces();
             case ELYTRA -> settings.isAllowElytras();
+            default -> true;
+        };
+    }
+
+    private boolean isCombatItemOffCooldown(Material material, Player actor) {
+        return switch (material) {
+            case ENDER_PEARL -> !actor.hasCooldown(Material.ENDER_PEARL);
+            case WIND_CHARGE -> !actor.hasCooldown(Material.WIND_CHARGE);
             default -> true;
         };
     }
