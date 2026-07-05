@@ -57,6 +57,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
+@SuppressWarnings({"PMD.AvoidFieldNameMatchingMethodName", "PMD.ExcessiveParameterList", "PMD.NullAssignment"})
 public final class DuelService {
     private static final Set<String> BUILT_IN_ALLOWED_DUEL_COMMANDS = Set.of(
         "draw",
@@ -67,6 +68,13 @@ public final class DuelService {
         "duel info",
         "duel settings"
     );
+    private static final String MSG_PLAYER_IN_COMBAT = "messages.player-in-combat";
+    private static final String MSG_TARGET_IN_COMBAT = "messages.target-in-combat";
+    private static final String MSG_MUST_BE_AT_SPAWN = "messages.must-be-at-spawn";
+    private static final String MSG_TARGET_OFFLINE = "messages.target-offline";
+    private static final String MSG_CANNOT_AFFORD = "messages.cannot-afford";
+    private static final String MSG_NO_PENDING_REQUEST = "messages.no-pending-request";
+    private static final String PERMISSION_BYPASS_ENTER = "warzoneduels.bypass.enter";
 
     private final WarzoneDuelsPlugin plugin;
     private final EconomyPort economyPort;
@@ -321,35 +329,61 @@ public final class DuelService {
 
     public void startBuilder(Player sender, Player target) {
         requirePrimaryThread();
-        if (!isArenaReady()) {
-            sendMessage(sender, "messages.no-arena");
-            return;
-        }
-        if (activeDuel != null || pendingRequest != null || queuedDuelStart != null) {
-            sendMessage(sender, "messages.duel-already-running");
-            return;
-        }
-        if (target.getUniqueId().equals(sender.getUniqueId())) {
-            sendMessage(sender, "messages.self-duel");
-            return;
-        }
-        if (combatTagPort != null && combatTagPort.isInCombat(sender)) {
-            sendMessage(sender, "messages.player-in-combat");
-            return;
-        }
-        if (combatTagPort != null && combatTagPort.isInCombat(target)) {
-            sendMessage(sender, "messages.target-in-combat", "{player}", target.getName());
-            return;
-        }
-        if (!isInsideMatchmakingSpawn(sender.getLocation()) || !isInsideMatchmakingSpawn(target.getLocation())) {
-            sendMessage(sender, "messages.must-be-at-spawn");
-            return;
-        }
-        if (isParticipantRestricted(sender.getUniqueId()) || isParticipantRestricted(target.getUniqueId())) {
-            sendMessage(sender, "messages.target-busy");
+        if (rejectBuilderStart(sender, target)) {
             return;
         }
         builders.put(sender.getUniqueId(), new BuilderSession(target.getUniqueId(), new DuelSettings()));
+    }
+
+    private boolean rejectBuilderStart(Player sender, Player target) {
+        return rejectUnavailableBuilder(sender)
+            || rejectInvalidBuilderPlayers(sender, target)
+            || rejectCombatTaggedBuilder(sender, target)
+            || rejectBusyBuilderPlayers(sender, target);
+    }
+
+    private boolean rejectUnavailableBuilder(Player sender) {
+        if (!isArenaReady()) {
+            sendMessage(sender, "messages.no-arena");
+            return true;
+        }
+        if (activeDuel != null || pendingRequest != null || queuedDuelStart != null) {
+            sendMessage(sender, "messages.duel-already-running");
+            return true;
+        }
+        return false;
+    }
+
+    private boolean rejectInvalidBuilderPlayers(Player sender, Player target) {
+        if (target.getUniqueId().equals(sender.getUniqueId())) {
+            sendMessage(sender, "messages.self-duel");
+            return true;
+        }
+        if (!isInsideMatchmakingSpawn(sender.getLocation()) || !isInsideMatchmakingSpawn(target.getLocation())) {
+            sendMessage(sender, MSG_MUST_BE_AT_SPAWN);
+            return true;
+        }
+        return false;
+    }
+
+    private boolean rejectCombatTaggedBuilder(Player sender, Player target) {
+        if (isCombatTagged(sender)) {
+            sendMessage(sender, MSG_PLAYER_IN_COMBAT);
+            return true;
+        }
+        if (isCombatTagged(target)) {
+            sendMessage(sender, MSG_TARGET_IN_COMBAT, "{player}", target.getName());
+            return true;
+        }
+        return false;
+    }
+
+    private boolean rejectBusyBuilderPlayers(Player sender, Player target) {
+        if (isParticipantRestricted(sender.getUniqueId()) || isParticipantRestricted(target.getUniqueId())) {
+            sendMessage(sender, "messages.target-busy");
+            return true;
+        }
+        return false;
     }
 
     public void sendRequest(Player requester) {
@@ -366,42 +400,18 @@ public final class DuelService {
         Player target = Bukkit.getPlayer(builder.targetId());
         if (target == null || !target.isOnline()) {
             builders.remove(requester.getUniqueId());
-            sendMessage(requester, "messages.target-offline");
+            sendMessage(requester, MSG_TARGET_OFFLINE);
             return;
         }
-        if (combatTagPort != null && combatTagPort.isInCombat(requester)) {
-            sendMessage(requester, "messages.player-in-combat");
-            return;
-        }
-        if (combatTagPort != null && combatTagPort.isInCombat(target)) {
-            sendMessage(requester, "messages.target-in-combat", "{player}", target.getName());
-            return;
-        }
-        if (!isInsideMatchmakingSpawn(requester.getLocation()) || !isInsideMatchmakingSpawn(target.getLocation())) {
-            sendMessage(requester, "messages.must-be-at-spawn");
-            return;
-        }
-        if (!allowSameIp && sameIp(requester, target)) {
-            sendMessage(requester, "messages.same-ip-blocked");
+        if (rejectRequestPlayers(requester, target)) {
             return;
         }
         DuelSettings settings = builder.settings().copy();
         if (settings.getWager() > maxWager) {
             settings.setWager(maxWager);
         }
-        if (settings.getWager() > 0D && !economyPort.isEnabled()) {
-            sendMessage(requester, "messages.wager-disabled");
+        if (rejectRequestWager(requester, target, settings)) {
             return;
-        }
-        if (settings.getWager() > 0D) {
-            if (!economyPort.has(requester, settings.getWager())) {
-                sendMessage(requester, "messages.cannot-afford", "{player}", requester.getName());
-                return;
-            }
-            if (!economyPort.has(target, settings.getWager())) {
-                sendMessage(requester, "messages.cannot-afford", "{player}", target.getName());
-                return;
-            }
         }
         pendingRequest = new DuelRequest(
             requester.getUniqueId(),
@@ -417,10 +427,53 @@ public final class DuelService {
         scheduleRequestExpiry();
     }
 
+    private boolean rejectRequestPlayers(Player requester, Player target) {
+        if (isCombatTagged(requester)) {
+            sendMessage(requester, MSG_PLAYER_IN_COMBAT);
+            return true;
+        }
+        if (isCombatTagged(target)) {
+            sendMessage(requester, MSG_TARGET_IN_COMBAT, "{player}", target.getName());
+            return true;
+        }
+        if (!isInsideMatchmakingSpawn(requester.getLocation()) || !isInsideMatchmakingSpawn(target.getLocation())) {
+            sendMessage(requester, MSG_MUST_BE_AT_SPAWN);
+            return true;
+        }
+        if (!allowSameIp && sameIp(requester, target)) {
+            sendMessage(requester, "messages.same-ip-blocked");
+            return true;
+        }
+        return false;
+    }
+
+    private boolean rejectRequestWager(Player requester, Player target, DuelSettings settings) {
+        if (settings.getWager() <= 0D) {
+            return false;
+        }
+        if (!economyPort.isEnabled()) {
+            sendMessage(requester, "messages.wager-disabled");
+            return true;
+        }
+        if (!economyPort.has(requester, settings.getWager())) {
+            sendMessage(requester, MSG_CANNOT_AFFORD, "{player}", requester.getName());
+            return true;
+        }
+        if (!economyPort.has(target, settings.getWager())) {
+            sendMessage(requester, MSG_CANNOT_AFFORD, "{player}", target.getName());
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isCombatTagged(Player player) {
+        return combatTagPort != null && combatTagPort.isInCombat(player);
+    }
+
     public void acceptRequest(Player target) {
         requirePrimaryThread();
         if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
-            sendMessage(target, "messages.no-pending-request");
+            sendMessage(target, MSG_NO_PENDING_REQUEST);
             return;
         }
         openPendingRequestReview(target);
@@ -429,33 +482,33 @@ public final class DuelService {
     public void confirmAcceptRequest(Player target) {
         requirePrimaryThread();
         if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
-            sendMessage(target, "messages.no-pending-request");
+            sendMessage(target, MSG_NO_PENDING_REQUEST);
             return;
         }
         Player requester = Bukkit.getPlayer(pendingRequest.requesterId());
         if (requester == null || !requester.isOnline()) {
             clearPendingRequest();
-            sendMessage(target, "messages.target-offline");
+            sendMessage(target, MSG_TARGET_OFFLINE);
             return;
         }
-        if (combatTagPort != null && combatTagPort.isInCombat(requester)) {
+        if (isCombatTagged(requester)) {
             clearPendingRequest();
-            sendMessage(requester, "messages.player-in-combat");
-            sendMessage(target, "messages.target-in-combat", "{player}", requester.getName());
+            sendMessage(requester, MSG_PLAYER_IN_COMBAT);
+            sendMessage(target, MSG_TARGET_IN_COMBAT, "{player}", requester.getName());
             return;
         }
-        if (combatTagPort != null && combatTagPort.isInCombat(target)) {
+        if (isCombatTagged(target)) {
             clearPendingRequest();
-            sendMessage(target, "messages.player-in-combat");
+            sendMessage(target, MSG_PLAYER_IN_COMBAT);
             if (requester != null) {
-                sendMessage(requester, "messages.target-in-combat", "{player}", target.getName());
+                sendMessage(requester, MSG_TARGET_IN_COMBAT, "{player}", target.getName());
             }
             return;
         }
         if (!isInsideMatchmakingSpawn(requester.getLocation()) || !isInsideMatchmakingSpawn(target.getLocation())) {
             clearPendingRequest();
-            sendMessage(requester, "messages.must-be-at-spawn");
-            sendMessage(target, "messages.must-be-at-spawn");
+            sendMessage(requester, MSG_MUST_BE_AT_SPAWN);
+            sendMessage(target, MSG_MUST_BE_AT_SPAWN);
             return;
         }
         DuelSettings settings = pendingRequest.settings();
@@ -467,12 +520,12 @@ public final class DuelService {
             }
             if (!economyPort.has(requester, settings.getWager())) {
                 clearPendingRequest();
-                sendMessage(target, "messages.cannot-afford", "{player}", requester.getName());
+                sendMessage(target, MSG_CANNOT_AFFORD, "{player}", requester.getName());
                 return;
             }
             if (!economyPort.has(target, settings.getWager())) {
                 clearPendingRequest();
-                sendMessage(target, "messages.cannot-afford", "{player}", target.getName());
+                sendMessage(target, MSG_CANNOT_AFFORD, "{player}", target.getName());
                 return;
             }
         }
@@ -487,7 +540,7 @@ public final class DuelService {
     public void openPendingRequestReview(Player target) {
         requirePrimaryThread();
         if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
-            sendMessage(target, "messages.no-pending-request");
+            sendMessage(target, MSG_NO_PENDING_REQUEST);
             return;
         }
         target.openInventory(DuelGui.buildRequestPreviewGui(pendingRequest.requesterName(), pendingRequest.settings()));
@@ -496,7 +549,7 @@ public final class DuelService {
     public void denyRequest(Player target) {
         requirePrimaryThread();
         if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
-            sendMessage(target, "messages.no-pending-request");
+            sendMessage(target, MSG_NO_PENDING_REQUEST);
             return;
         }
         Player requester = Bukkit.getPlayer(pendingRequest.requesterId());
@@ -556,7 +609,7 @@ public final class DuelService {
             sendMessageOrFallback(player, "messages.duel-watch-participant", ChatColor.RED + "You are already participating in this duel.");
             return;
         }
-        if (blockCombatEntry && combatTagPort != null && combatTagPort.isInCombat(player)) {
+        if (blockCombatEntry && isCombatTagged(player)) {
             sendMessage(player, "messages.arena-combat-entry-blocked");
             return;
         }
@@ -651,10 +704,10 @@ public final class DuelService {
             Player requester = Bukkit.getPlayer(queuedDuelStart.requesterId());
             Player target = Bukkit.getPlayer(queuedDuelStart.targetId());
             if (requester != null) {
-                sendMessage(requester, "messages.target-offline");
+                sendMessage(requester, MSG_TARGET_OFFLINE);
             }
             if (target != null) {
-                sendMessage(target, "messages.target-offline");
+                sendMessage(target, MSG_TARGET_OFFLINE);
             }
             clearQueuedDuelStart();
         }
@@ -807,11 +860,11 @@ public final class DuelService {
     public boolean isWatchedSpectatorCommandBlocked(Player player) {
         return player != null
             && isWatchedSpectator(player.getUniqueId())
-            && !player.hasPermission("warzoneduels.bypass.enter");
+            && !player.hasPermission(PERMISSION_BYPASS_ENTER);
     }
 
     public boolean isWatchedSpectatorTeleportBlocked(Player player, Location to, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause) {
-        if (player == null || !isWatchedSpectator(player.getUniqueId()) || player.hasPermission("warzoneduels.bypass.enter")) {
+        if (player == null || !isWatchedSpectator(player.getUniqueId()) || player.hasPermission(PERMISSION_BYPASS_ENTER)) {
             return false;
         }
         if (cause == org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.SPECTATE) {
@@ -824,7 +877,7 @@ public final class DuelService {
         return player != null
             && to != null
             && isWatchedSpectator(player.getUniqueId())
-            && !player.hasPermission("warzoneduels.bypass.enter")
+            && !player.hasPermission(PERMISSION_BYPASS_ENTER)
             && arena != null
             && !arena.contains(to);
     }
@@ -1016,7 +1069,7 @@ public final class DuelService {
         if (!blockCombatEntry || player == null || combatTagPort == null || arena == null || to == null) {
             return false;
         }
-        if (isInActiveDuel(player.getUniqueId()) || player.hasPermission("warzoneduels.bypass.enter")) {
+        if (isInActiveDuel(player.getUniqueId()) || player.hasPermission(PERMISSION_BYPASS_ENTER)) {
             return false;
         }
         if (!arena.contains(to) || (from != null && arena.contains(from))) {
@@ -1029,7 +1082,7 @@ public final class DuelService {
         if (player == null || arena == null || to == null) {
             return false;
         }
-        if (isInActiveDuel(player.getUniqueId()) || player.hasPermission("warzoneduels.bypass.enter")) {
+        if (isInActiveDuel(player.getUniqueId()) || player.hasPermission(PERMISSION_BYPASS_ENTER)) {
             return false;
         }
         return arenaTerrainService.isOnOrInsideFootprintBlock(to);
@@ -1384,8 +1437,8 @@ public final class DuelService {
         loadoutArchiveStore.saveLatestPreDuel(target, loadoutArchiveStore.capture(target));
 
         if (preparedSettings.getWager() > 0D && !holdWager(stagedDuel, requester, target, preparedSettings.getWager())) {
-            sendMessage(requester, "messages.cannot-afford", "{player}", target.getName());
-            sendMessage(target, "messages.cannot-afford", "{player}", requester.getName());
+            sendMessage(requester, MSG_CANNOT_AFFORD, "{player}", target.getName());
+            sendMessage(target, MSG_CANNOT_AFFORD, "{player}", requester.getName());
             return;
         }
 
@@ -1790,7 +1843,7 @@ public final class DuelService {
                 watchedSpectators.remove(playerId);
                 continue;
             }
-            if (player.hasPermission("warzoneduels.bypass.enter")) {
+            if (player.hasPermission(PERMISSION_BYPASS_ENTER)) {
                 continue;
             }
             if (player.getGameMode() != GameMode.SPECTATOR) {
@@ -2140,27 +2193,27 @@ public final class DuelService {
             Player target = Bukkit.getPlayer(queuedDuelStart.targetId());
             if (requester == null || !requester.isOnline() || target == null || !target.isOnline()) {
                 if (requester != null) {
-                    sendMessage(requester, "messages.target-offline");
+                    sendMessage(requester, MSG_TARGET_OFFLINE);
                 }
                 if (target != null) {
-                    sendMessage(target, "messages.target-offline");
+                    sendMessage(target, MSG_TARGET_OFFLINE);
                 }
                 clearQueuedDuelStart();
                 return;
             }
             if (!isInsideMatchmakingSpawn(requester.getLocation()) || !isInsideMatchmakingSpawn(target.getLocation())) {
-                sendMessage(requester, "messages.must-be-at-spawn");
-                sendMessage(target, "messages.must-be-at-spawn");
+                sendMessage(requester, MSG_MUST_BE_AT_SPAWN);
+                sendMessage(target, MSG_MUST_BE_AT_SPAWN);
                 clearQueuedDuelStart();
                 return;
             }
-            if (combatTagPort != null && (combatTagPort.isInCombat(requester) || combatTagPort.isInCombat(target))) {
-                if (combatTagPort.isInCombat(requester)) {
-                    sendMessage(requester, "messages.player-in-combat");
-                    sendMessage(target, "messages.target-in-combat", "{player}", requester.getName());
+            if (isCombatTagged(requester) || isCombatTagged(target)) {
+                if (isCombatTagged(requester)) {
+                    sendMessage(requester, MSG_PLAYER_IN_COMBAT);
+                    sendMessage(target, MSG_TARGET_IN_COMBAT, "{player}", requester.getName());
                 } else {
-                    sendMessage(target, "messages.player-in-combat");
-                    sendMessage(requester, "messages.target-in-combat", "{player}", target.getName());
+                    sendMessage(target, MSG_PLAYER_IN_COMBAT);
+                    sendMessage(requester, MSG_TARGET_IN_COMBAT, "{player}", target.getName());
                 }
                 clearQueuedDuelStart();
                 return;
