@@ -19,11 +19,12 @@ import org.bukkit.scheduler.BukkitTask;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -33,6 +34,52 @@ import java.util.function.Consumer;
 
 @SuppressWarnings("PMD.DoNotUseThreads")
 public final class ArenaTerrainService {
+    private static final String OPERATION_RESTORE = "restore";
+    private static final List<String> SUPPORT_SENSITIVE_SUFFIXES = List.of(
+        "_BUTTON",
+        "_TORCH",
+        "_WALL_TORCH",
+        "_SIGN",
+        "_HANGING_SIGN",
+        "_WALL_SIGN",
+        "_RAIL",
+        "_BANNER",
+        "_WALL_BANNER",
+        "_SAPLING",
+        "_FLOWER",
+        "_TULIP",
+        "_MUSHROOM",
+        "_CORAL",
+        "_FAN",
+        "_PRESSURE_PLATE",
+        "_CARPET",
+        "_POT",
+        "_HEAD",
+        "_SKULL",
+        "_VINE",
+        "_CANDLE",
+        "_BUSH"
+    );
+    private static final Set<Material> SUPPORT_SENSITIVE_MATERIALS = Set.of(
+        Material.CACTUS,
+        Material.DEAD_BUSH,
+        Material.SUGAR_CANE,
+        Material.TALL_GRASS,
+        Material.SHORT_GRASS,
+        Material.FERN,
+        Material.LARGE_FERN,
+        Material.SUNFLOWER,
+        Material.LILAC,
+        Material.ROSE_BUSH,
+        Material.PEONY,
+        Material.LADDER,
+        Material.LEVER,
+        Material.TRIPWIRE_HOOK,
+        Material.REDSTONE_WIRE,
+        Material.REPEATER,
+        Material.COMPARATOR
+    );
+
     private final WarzoneDuelsPlugin plugin;
     private final ArenaMapService arenaMapService;
     private final ArenaFootprintStore footprintStore;
@@ -50,7 +97,7 @@ public final class ArenaTerrainService {
     private boolean disabled;
     private TerrainOperation operation;
     private ArenaMapOperationStatus operationStatus = ArenaMapOperationStatus.idle("flat_arena");
-    private final Map<String, ArenaMapSnapshot> snapshotCache = new HashMap<>();
+    private final Map<String, ArenaMapSnapshot> snapshotCache = new ConcurrentHashMap<>();
 
     public ArenaTerrainService(
         WarzoneDuelsPlugin plugin,
@@ -76,7 +123,7 @@ public final class ArenaTerrainService {
         disabled = true;
         synchronized (operationLock) {
             if (operation != null && operation.task != null) {
-                if ("restore".equals(operation.type)) {
+                if (OPERATION_RESTORE.equals(operation.type)) {
                     markDirty("Terrain restore was interrupted while disabling.");
                 }
                 operation.task.cancel();
@@ -290,13 +337,13 @@ public final class ArenaTerrainService {
     }
 
     public void loadSnapshot(String mapId, Runnable success, Consumer<String> failure) {
-        if (!beginOperation("restore", mapId, failure)) {
+        if (!beginOperation(OPERATION_RESTORE, mapId, failure)) {
             return;
         }
         ArenaMapSnapshot cachedSnapshot = cachedSnapshot(mapId);
         if (cachedSnapshot != null) {
             Bukkit.getScheduler().runTask(plugin, () -> {
-                if (disabled || !isCurrentOperation("restore", mapId)) {
+                if (disabled || !isCurrentOperation(OPERATION_RESTORE, mapId)) {
                     return;
                 }
                 if (!validateSnapshot(cachedSnapshot, failure)) {
@@ -312,7 +359,7 @@ public final class ArenaTerrainService {
         }
         CompletableFuture<ArenaMapSnapshot> future = snapshotStore.loadAsync(mapId, mapsDirectory, ioExecutor);
         future.whenComplete((snapshot, throwable) -> runOnMainIfEnabled(() -> {
-            if (disabled || !isCurrentOperation("restore", mapId)) {
+            if (disabled || !isCurrentOperation(OPERATION_RESTORE, mapId)) {
                 return;
             }
             if (throwable != null) {
@@ -550,7 +597,7 @@ public final class ArenaTerrainService {
     private void failActiveOperation(String message, Consumer<String> failure) {
         TerrainOperation finished = clearOperation();
         if (finished != null && finished.task != null) {
-            if ("restore".equals(finished.type)) {
+            if (OPERATION_RESTORE.equals(finished.type)) {
                 markDirty(message);
             }
             finished.task.cancel();
@@ -660,46 +707,8 @@ public final class ArenaTerrainService {
 
     private boolean isSupportSensitive(Material material) {
         String name = material.name();
-        return name.endsWith("_BUTTON")
-            || name.endsWith("_TORCH")
-            || name.endsWith("_WALL_TORCH")
-            || name.endsWith("_SIGN")
-            || name.endsWith("_HANGING_SIGN")
-            || name.endsWith("_WALL_SIGN")
-            || name.endsWith("_RAIL")
-            || name.endsWith("_BANNER")
-            || name.endsWith("_WALL_BANNER")
-            || name.endsWith("_SAPLING")
-            || name.endsWith("_FLOWER")
-            || name.endsWith("_TULIP")
-            || name.endsWith("_MUSHROOM")
-            || name.endsWith("_CORAL")
-            || name.endsWith("_FAN")
-            || name.endsWith("_PRESSURE_PLATE")
-            || name.endsWith("_CARPET")
-            || name.endsWith("_POT")
-            || name.endsWith("_HEAD")
-            || name.endsWith("_SKULL")
-            || name.endsWith("_VINE")
-            || name.endsWith("_CANDLE")
-            || name.endsWith("_BUSH")
-            || material == Material.CACTUS
-            || material == Material.DEAD_BUSH
-            || material == Material.SUGAR_CANE
-            || material == Material.TALL_GRASS
-            || material == Material.SHORT_GRASS
-            || material == Material.FERN
-            || material == Material.LARGE_FERN
-            || material == Material.SUNFLOWER
-            || material == Material.LILAC
-            || material == Material.ROSE_BUSH
-            || material == Material.PEONY
-            || material == Material.LADDER
-            || material == Material.LEVER
-            || material == Material.TRIPWIRE_HOOK
-            || material == Material.REDSTONE_WIRE
-            || material == Material.REPEATER
-            || material == Material.COMPARATOR;
+        return SUPPORT_SENSITIVE_MATERIALS.contains(material)
+            || SUPPORT_SENSITIVE_SUFFIXES.stream().anyMatch(name::endsWith);
     }
 
     private static final class TerrainOperation {
