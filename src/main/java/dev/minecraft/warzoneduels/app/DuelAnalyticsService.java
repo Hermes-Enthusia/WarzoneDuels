@@ -23,7 +23,15 @@ import java.util.concurrent.TimeUnit;
 import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitTask;
 
+@SuppressWarnings({"PMD.DoNotUseThreads", "PMD.UseConcurrentHashMap"})
 public final class DuelAnalyticsService {
+    private static final String NO_DATA_LABEL = "None";
+    private static final int TOP_LABEL_LIMIT = 1;
+    private static final int RECENT_OPPONENT_SCAN_LIMIT = 250;
+    private static final int PLAYER_LABEL_SCAN_LIMIT = 500;
+    private static final int CLEANUP_MINUTES_TO_TICKS = 60 * 20;
+    private static final int WRITER_SHUTDOWN_SECONDS = 5;
+
     private final WarzoneDuelsPlugin plugin;
     private final DuelAnalyticsStore store;
     private final ExecutorService writer;
@@ -43,7 +51,7 @@ public final class DuelAnalyticsService {
         store.enable();
         long retentionDays = Math.max(1L, plugin.getConfig().getLong("analytics.retention-days", 365L));
         long cleanupMinutes = Math.max(5L, plugin.getConfig().getLong("analytics.cleanup-interval-minutes", 30L));
-        long cleanupTicks = cleanupMinutes * 60L * 20L;
+        long cleanupTicks = cleanupMinutes * CLEANUP_MINUTES_TO_TICKS;
         cleanupTask = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, () -> {
             long cutoff = System.currentTimeMillis() - Duration.ofDays(retentionDays).toMillis();
             store.cleanupOlderThan(cutoff);
@@ -57,7 +65,7 @@ public final class DuelAnalyticsService {
         }
         writer.shutdown();
         try {
-            if (!writer.awaitTermination(5, TimeUnit.SECONDS)) {
+            if (!writer.awaitTermination(WRITER_SHUTDOWN_SECONDS, TimeUnit.SECONDS)) {
                 writer.shutdownNow();
             }
         } catch (InterruptedException ex) {
@@ -117,25 +125,25 @@ public final class DuelAnalyticsService {
     }
 
     public String mostUsedMapSince(Duration duration) {
-        List<Map.Entry<String, Long>> entries = topMapsSince(duration, 1);
-        return entries.isEmpty() ? "None" : safeLabel(entries.get(0).getKey());
+        List<Map.Entry<String, Long>> entries = topMapsSince(duration, TOP_LABEL_LIMIT);
+        return entries.isEmpty() ? NO_DATA_LABEL : safeLabel(entries.get(0).getKey());
     }
 
     public String mostUsedRulesSince(Duration duration) {
-        List<Map.Entry<String, Long>> entries = topRulesSince(duration, 1);
-        return entries.isEmpty() ? "None" : safeLabel(entries.get(0).getKey());
+        List<Map.Entry<String, Long>> entries = topRulesSince(duration, TOP_LABEL_LIMIT);
+        return entries.isEmpty() ? NO_DATA_LABEL : safeLabel(entries.get(0).getKey());
     }
 
     public String mostPlayedMapForPlayer(UUID playerId) {
-        return topLabelForPlayer(playerId, DuelRecord::mapName, 1, "None");
+        return topLabelForPlayer(playerId, DuelRecord::mapName, TOP_LABEL_LIMIT, NO_DATA_LABEL);
     }
 
     public String mostPlayedRulesForPlayer(UUID playerId) {
-        return topLabelForPlayer(playerId, DuelRecord::ruleset, 1, "None");
+        return topLabelForPlayer(playerId, DuelRecord::ruleset, TOP_LABEL_LIMIT, NO_DATA_LABEL);
     }
 
     public List<Map.Entry<String, Long>> recentOpponents(UUID playerId, int limit) {
-        List<DuelRecord> records = recentDuelsForPlayer(playerId, 250);
+        List<DuelRecord> records = recentDuelsForPlayer(playerId, RECENT_OPPONENT_SCAN_LIMIT);
         Map<String, Long> counts = new LinkedHashMap<>();
         for (DuelRecord record : records) {
             String opponent = opponentName(record, playerId);
@@ -156,29 +164,7 @@ public final class DuelAnalyticsService {
         DuelSettings settings = duel.settings();
         long endedAt = System.currentTimeMillis();
         long duration = Math.max(0L, endedAt - duel.startedAtEpochMs());
-
-        UUID loserId = null;
-        String winnerName = null;
-        String loserName = null;
-        boolean countedAsMatch = reason == DuelEndReason.KILL || reason == DuelEndReason.DRAW || reason == DuelEndReason.DISCONNECT_TIMEOUT;
-        if (winnerId != null) {
-            MatchParticipant winner = duel.participant(winnerId);
-            MatchParticipant loser = duel.other(winnerId);
-            if (winner != null) {
-                winnerName = winner.name();
-            }
-            if (loser != null) {
-                loserId = loser.playerId();
-                loserName = loser.name();
-            }
-        }
-
-        if (reason == DuelEndReason.DRAW) {
-            countedAsMatch = true;
-        }
-        if (reason == DuelEndReason.SERVER_RESTART || reason == DuelEndReason.PLUGIN_DISABLE || reason == DuelEndReason.ADMIN_ABORT) {
-            countedAsMatch = false;
-        }
+        DuelOutcome outcome = outcomeFor(duel, winnerId);
 
         String reference = Long.toString(duel.startedAtEpochMs(), 36).toUpperCase(Locale.ROOT);
         return new DuelRecord(
@@ -191,18 +177,39 @@ public final class DuelAnalyticsService {
             participantTwo.playerId(),
             participantTwo.name(),
             winnerId,
-            winnerName,
-            loserId,
-            loserName,
+            outcome.winnerName(),
+            outcome.loserId(),
+            outcome.loserName(),
             settings.getMapId(),
             settings.getMapDisplayName(),
             settings.formatBlockRules(),
             settings.formatExtendedItemRules(),
             reason,
-            countedAsMatch,
+            countsAsMatch(reason),
             0,
             settings.getWager()
         );
+    }
+
+    private DuelOutcome outcomeFor(ActiveDuel duel, UUID winnerId) {
+        if (winnerId == null) {
+            return DuelOutcome.empty();
+        }
+        MatchParticipant winner = duel.participant(winnerId);
+        MatchParticipant loser = duel.other(winnerId);
+        return new DuelOutcome(
+            winner == null ? null : winner.name(),
+            loser == null ? null : loser.playerId(),
+            loser == null ? null : loser.name()
+        );
+    }
+
+    private boolean countsAsMatch(DuelEndReason reason) {
+        return switch (reason) {
+            case KILL, DRAW, DISCONNECT_TIMEOUT -> true;
+            case SERVER_RESTART, PLUGIN_DISABLE, ADMIN_ABORT -> false;
+            default -> false;
+        };
     }
 
     private long cutoff(Duration duration) {
@@ -220,11 +227,11 @@ public final class DuelAnalyticsService {
     }
 
     private String safeLabel(String value) {
-        return value == null || value.isBlank() ? "None" : value;
+        return value == null || value.isBlank() ? NO_DATA_LABEL : value;
     }
 
     private String topLabelForPlayer(UUID playerId, java.util.function.Function<DuelRecord, String> extractor, int limit, String fallback) {
-        List<DuelRecord> records = recentDuelsForPlayer(playerId, 500);
+        List<DuelRecord> records = recentDuelsForPlayer(playerId, PLAYER_LABEL_SCAN_LIMIT);
         if (records.isEmpty()) {
             return fallback;
         }
@@ -242,5 +249,11 @@ public final class DuelAnalyticsService {
             .map(Map.Entry::getKey)
             .findFirst()
             .orElse(fallback);
+    }
+
+    private record DuelOutcome(String winnerName, UUID loserId, String loserName) {
+        private static DuelOutcome empty() {
+            return new DuelOutcome(null, null, null);
+        }
     }
 }
