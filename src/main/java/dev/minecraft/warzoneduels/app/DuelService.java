@@ -77,6 +77,7 @@ public final class DuelService {
     private static final String PERMISSION_BYPASS_ENTER = "warzoneduels.bypass.enter";
     private static final String PLAYER_PLACEHOLDER = "{player}";
     private static final double NO_WAGER = 0D;
+    private static final long QUEUED_START_PERIOD_TICKS = 20L;
 
     private final WarzoneDuelsPlugin plugin;
     private final EconomyPort economyPort;
@@ -483,53 +484,13 @@ public final class DuelService {
 
     public void confirmAcceptRequest(Player target) {
         requirePrimaryThread();
-        if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
-            sendMessage(target, MSG_NO_PENDING_REQUEST);
-            return;
-        }
-        Player requester = Bukkit.getPlayer(pendingRequest.requesterId());
-        if (requester == null || !requester.isOnline()) {
-            clearPendingRequest();
-            sendMessage(target, MSG_TARGET_OFFLINE);
-            return;
-        }
-        if (isCombatTagged(requester)) {
-            clearPendingRequest();
-            sendMessage(requester, MSG_PLAYER_IN_COMBAT);
-            sendMessage(target, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, requester.getName());
-            return;
-        }
-        if (isCombatTagged(target)) {
-            clearPendingRequest();
-            sendMessage(target, MSG_PLAYER_IN_COMBAT);
-            if (requester != null) {
-                sendMessage(requester, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, target.getName());
-            }
-            return;
-        }
-        if (!isInsideMatchmakingSpawn(requester.getLocation()) || !isInsideMatchmakingSpawn(target.getLocation())) {
-            clearPendingRequest();
-            sendMessage(requester, MSG_MUST_BE_AT_SPAWN);
-            sendMessage(target, MSG_MUST_BE_AT_SPAWN);
+        Player requester = acceptRequester(target);
+        if (requester == null) {
             return;
         }
         DuelSettings settings = pendingRequest.settings();
-        if (settings.getWager() > NO_WAGER) {
-            if (!economyPort.isEnabled()) {
-                clearPendingRequest();
-                sendMessage(target, "messages.wager-disabled");
-                return;
-            }
-            if (!economyPort.has(requester, settings.getWager())) {
-                clearPendingRequest();
-                sendMessage(target, MSG_CANNOT_AFFORD, PLAYER_PLACEHOLDER, requester.getName());
-                return;
-            }
-            if (!economyPort.has(target, settings.getWager())) {
-                clearPendingRequest();
-                sendMessage(target, MSG_CANNOT_AFFORD, PLAYER_PLACEHOLDER, target.getName());
-                return;
-            }
+        if (rejectAcceptedRequest(requester, target, settings)) {
+            return;
         }
         clearPendingRequest();
         if (arenaTerrainService.isBusy()) {
@@ -537,6 +498,73 @@ public final class DuelService {
             return;
         }
         startDuel(requester, target, settings);
+    }
+
+    private Player acceptRequester(Player target) {
+        if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
+            sendMessage(target, MSG_NO_PENDING_REQUEST);
+            return null;
+        }
+        Player requester = Bukkit.getPlayer(pendingRequest.requesterId());
+        if (requester != null && requester.isOnline()) {
+            return requester;
+        }
+        clearPendingRequest();
+        sendMessage(target, MSG_TARGET_OFFLINE);
+        return null;
+    }
+
+    private boolean rejectAcceptedRequest(Player requester, Player target, DuelSettings settings) {
+        return rejectAcceptedCombatState(requester, target)
+            || rejectAcceptedLocation(requester, target)
+            || rejectAcceptedWager(requester, target, settings);
+    }
+
+    private boolean rejectAcceptedCombatState(Player requester, Player target) {
+        if (isCombatTagged(requester)) {
+            clearPendingRequest();
+            sendMessage(requester, MSG_PLAYER_IN_COMBAT);
+            sendMessage(target, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, requester.getName());
+            return true;
+        }
+        if (!isCombatTagged(target)) {
+            return false;
+        }
+        clearPendingRequest();
+        sendMessage(target, MSG_PLAYER_IN_COMBAT);
+        sendMessage(requester, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, target.getName());
+        return true;
+    }
+
+    private boolean rejectAcceptedLocation(Player requester, Player target) {
+        if (isInsideMatchmakingSpawn(requester.getLocation()) && isInsideMatchmakingSpawn(target.getLocation())) {
+            return false;
+        }
+        clearPendingRequest();
+        sendMessage(requester, MSG_MUST_BE_AT_SPAWN);
+        sendMessage(target, MSG_MUST_BE_AT_SPAWN);
+        return true;
+    }
+
+    private boolean rejectAcceptedWager(Player requester, Player target, DuelSettings settings) {
+        if (settings.getWager() > NO_WAGER) {
+            if (!economyPort.isEnabled()) {
+                clearPendingRequest();
+                sendMessage(target, "messages.wager-disabled");
+                return true;
+            }
+            if (!economyPort.has(requester, settings.getWager())) {
+                clearPendingRequest();
+                sendMessage(target, MSG_CANNOT_AFFORD, PLAYER_PLACEHOLDER, requester.getName());
+                return true;
+            }
+            if (!economyPort.has(target, settings.getWager())) {
+                clearPendingRequest();
+                sendMessage(target, MSG_CANNOT_AFFORD, PLAYER_PLACEHOLDER, target.getName());
+                return true;
+            }
+        }
+        return false;
     }
 
     public void openPendingRequestReview(Player target) {
@@ -962,15 +990,23 @@ public final class DuelService {
         if (!isInActiveDuel(actor.getUniqueId())) {
             return false;
         }
+        return activeSettingsAllowRestrictedExplosive(material);
+    }
+
+    public boolean isExplosiveMaterialAllowed(Material material) {
+        if (!isRestrictedExplosiveMaterial(material)) {
+            return true;
+        }
+        if (activeDuel == null) {
+            return true;
+        }
+        return activeSettingsAllowRestrictedExplosive(material);
+    }
+
+    private boolean activeSettingsAllowRestrictedExplosive(Material material) {
         DuelSettings settings = activeDuel.settings();
-        if (material == Material.END_CRYSTAL || material == Material.RESPAWN_ANCHOR) {
-            if (settings.getPlaceBreakMode() == DuelSettings.PlaceBreakMode.PLACE_BREAK) {
-                return settings.isAllowCrystalsAnchors();
-            }
-            if (settings.getPlaceBreakMode() == DuelSettings.PlaceBreakMode.PLACE_ONLY) {
-                return settings.isAllowCrystalsAnchors();
-            }
-            return false;
+        if (isCrystalOrAnchor(material)) {
+            return isPlaceBreakOrPlaceOnly(settings) && settings.isAllowCrystalsAnchors();
         }
         if (settings.getPlaceBreakMode() != DuelSettings.PlaceBreakMode.PLACE_BREAK) {
             return false;
@@ -984,33 +1020,13 @@ public final class DuelService {
         return true;
     }
 
-    public boolean isExplosiveMaterialAllowed(Material material) {
-        if (!isRestrictedExplosiveMaterial(material)) {
-            return true;
-        }
-        if (activeDuel == null) {
-            return true;
-        }
-        DuelSettings settings = activeDuel.settings();
-        if (material == Material.END_CRYSTAL || material == Material.RESPAWN_ANCHOR) {
-            if (settings.getPlaceBreakMode() == DuelSettings.PlaceBreakMode.PLACE_BREAK) {
-                return settings.isAllowCrystalsAnchors();
-            }
-            if (settings.getPlaceBreakMode() == DuelSettings.PlaceBreakMode.PLACE_ONLY) {
-                return settings.isAllowCrystalsAnchors();
-            }
-            return false;
-        }
-        if (settings.getPlaceBreakMode() != DuelSettings.PlaceBreakMode.PLACE_BREAK) {
-            return false;
-        }
-        if (material == Material.TNT_MINECART) {
-            return settings.isAllowExplosiveMinecarts();
-        }
-        if (material == Material.TNT) {
-            return settings.isAllowOtherExplosives();
-        }
-        return true;
+    private boolean isCrystalOrAnchor(Material material) {
+        return material == Material.END_CRYSTAL || material == Material.RESPAWN_ANCHOR;
+    }
+
+    private boolean isPlaceBreakOrPlaceOnly(DuelSettings settings) {
+        return settings.getPlaceBreakMode() == DuelSettings.PlaceBreakMode.PLACE_BREAK
+            || settings.getPlaceBreakMode() == DuelSettings.PlaceBreakMode.PLACE_ONLY;
     }
 
     public boolean shouldExplosionsDamageBlocks() {
@@ -2183,47 +2199,77 @@ public final class DuelService {
         if (queuedStartTask != null) {
             return;
         }
-        queuedStartTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            if (queuedDuelStart == null) {
-                cancelQueuedStartTask();
-                return;
-            }
-            if (activeDuel != null || pendingRequest != null || arenaTerrainService.isBusy()) {
-                return;
-            }
-            Player requester = Bukkit.getPlayer(queuedDuelStart.requesterId());
-            Player target = Bukkit.getPlayer(queuedDuelStart.targetId());
-            if (requester == null || !requester.isOnline() || target == null || !target.isOnline()) {
-                if (requester != null) {
-                    sendMessage(requester, MSG_TARGET_OFFLINE);
-                }
-                if (target != null) {
-                    sendMessage(target, MSG_TARGET_OFFLINE);
-                }
-                clearQueuedDuelStart();
-                return;
-            }
-            if (!isInsideMatchmakingSpawn(requester.getLocation()) || !isInsideMatchmakingSpawn(target.getLocation())) {
-                sendMessage(requester, MSG_MUST_BE_AT_SPAWN);
-                sendMessage(target, MSG_MUST_BE_AT_SPAWN);
-                clearQueuedDuelStart();
-                return;
-            }
-            if (isCombatTagged(requester) || isCombatTagged(target)) {
-                if (isCombatTagged(requester)) {
-                    sendMessage(requester, MSG_PLAYER_IN_COMBAT);
-                sendMessage(target, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, requester.getName());
-                } else {
-                    sendMessage(target, MSG_PLAYER_IN_COMBAT);
-                    sendMessage(requester, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, target.getName());
-                }
-                clearQueuedDuelStart();
-                return;
-            }
-            DuelSettings settings = queuedDuelStart.settings().copy();
+        queuedStartTask = Bukkit.getScheduler().runTaskTimer(
+            plugin,
+            this::processQueuedDuelStart,
+            QUEUED_START_PERIOD_TICKS,
+            QUEUED_START_PERIOD_TICKS
+        );
+    }
+
+    private void processQueuedDuelStart() {
+        if (queuedDuelStart == null) {
+            cancelQueuedStartTask();
+            return;
+        }
+        if (activeDuel != null || pendingRequest != null || arenaTerrainService.isBusy()) {
+            return;
+        }
+        Player requester = Bukkit.getPlayer(queuedDuelStart.requesterId());
+        Player target = Bukkit.getPlayer(queuedDuelStart.targetId());
+        if (rejectQueuedPlayersOnline(requester, target)) {
+            return;
+        }
+        if (rejectQueuedStartState(requester, target)) {
+            return;
+        }
+        DuelSettings settings = queuedDuelStart.settings().copy();
+        clearQueuedDuelStart();
+        startDuel(requester, target, settings);
+    }
+
+    private boolean rejectQueuedPlayersOnline(Player requester, Player target) {
+        if (requester != null && requester.isOnline() && target != null && target.isOnline()) {
+            return false;
+        }
+        if (requester != null) {
+            sendMessage(requester, MSG_TARGET_OFFLINE);
+        }
+        if (target != null) {
+            sendMessage(target, MSG_TARGET_OFFLINE);
+        }
+        clearQueuedDuelStart();
+        return true;
+    }
+
+    private boolean rejectQueuedStartState(Player requester, Player target) {
+        return rejectQueuedLocation(requester, target) || rejectQueuedCombat(requester, target);
+    }
+
+    private boolean rejectQueuedLocation(Player requester, Player target) {
+        if (isInsideMatchmakingSpawn(requester.getLocation()) && isInsideMatchmakingSpawn(target.getLocation())) {
+            return false;
+        }
+        sendMessage(requester, MSG_MUST_BE_AT_SPAWN);
+        sendMessage(target, MSG_MUST_BE_AT_SPAWN);
+        clearQueuedDuelStart();
+        return true;
+    }
+
+    private boolean rejectQueuedCombat(Player requester, Player target) {
+        if (isCombatTagged(requester)) {
+            sendMessage(requester, MSG_PLAYER_IN_COMBAT);
+            sendMessage(target, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, requester.getName());
             clearQueuedDuelStart();
-            startDuel(requester, target, settings);
-        }, 20L, 20L);
+            return true;
+        }
+        if (!isCombatTagged(target)) {
+            return false;
+        }
+        sendMessage(target, MSG_PLAYER_IN_COMBAT);
+        sendMessage(requester, MSG_TARGET_IN_COMBAT, PLAYER_PLACEHOLDER, target.getName());
+        clearQueuedDuelStart();
+        return true;
     }
 
     private void clearQueuedDuelStart() {
