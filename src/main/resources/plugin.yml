@@ -22,3 +22,9 @@ permissions:
   warzoneduels.admin:
     description: Admin commands for WarzoneDuels.
     default: op
+  warzoneduels.bypass.build:
+    description: Allows staff to place, break, bucket, and interact with protected arena blocks for repairs.
+    default: op
+  warzoneduels.bypass.enter:
+    description: Allows staff to enter the fighting footprint and bypass spectator containment.
+    default: op

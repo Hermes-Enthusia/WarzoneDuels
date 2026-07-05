@@ -93,6 +93,7 @@ public final class DuelService {
     private final Map<UUID, Long> arenaExitMessageCooldowns = new ConcurrentHashMap<>();
     private final Map<UUID, Material> trackedExplosionSources = new ConcurrentHashMap<>();
     private final Set<UUID> victoryFireworkIds = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, GameMode> watchedSpectators = new ConcurrentHashMap<>();
 
     private ArenaDefinition arena;
     private DuelRequest pendingRequest;
@@ -185,6 +186,7 @@ public final class DuelService {
 
         if (duelEnding && activeDuel != null) {
             teleportOnlineParticipantsToExit(activeDuel);
+            clearWatchedSpectators(true);
             activeDuel = null;
             duelEnding = false;
             runtimeStateStore.clearRuntime();
@@ -197,6 +199,7 @@ public final class DuelService {
 
         if (serverStopping) {
             handleServerStoppingDisable();
+            clearWatchedSpectators(true);
             runtimeStateStore.clearReloadResumeMarker();
             runtimeStateStore.clearRuntime();
             builders.clear();
@@ -208,6 +211,7 @@ public final class DuelService {
             return;
         }
 
+        clearWatchedSpectators(true);
         if (activeDuel != null) {
             runtimeStateStore.saveActiveDuelSync(activeDuel);
             runtimeStateStore.markReloadResume();
@@ -552,7 +556,10 @@ public final class DuelService {
             sendMessage(player, "messages.arena-combat-entry-blocked");
             return;
         }
+        watchedSpectators.putIfAbsent(player.getUniqueId(), player.getGameMode());
+        player.setGameMode(GameMode.SPECTATOR);
         teleportSafe(player, arena.spectator());
+        startContainmentMonitor();
         sendMessageOrFallback(player, "messages.duel-watch-teleported", ChatColor.GREEN + "Warped to the arena stands.");
     }
 
@@ -667,6 +674,14 @@ public final class DuelService {
 
     public void handleJoin(Player player) {
         requirePrimaryThread();
+        GameMode watchedMode = watchedSpectators.remove(player.getUniqueId());
+        if (watchedMode != null) {
+            if (player.getGameMode() == GameMode.SPECTATOR) {
+                player.setGameMode(watchedMode);
+            }
+            teleportToExit(player);
+            return;
+        }
         if (spoilsService.prepareForcedDeathIfPending(player)) {
             pendingForcedDeathIds.add(player.getUniqueId());
             Bukkit.getScheduler().runTask(plugin, () -> {
@@ -742,6 +757,16 @@ public final class DuelService {
         sendArenaExitBlockedMessage(player);
     }
 
+    public void handleWatchedSpectatorExitAttempt(Player player) {
+        requirePrimaryThread();
+        if (player == null || arena == null || !isWatchedSpectator(player.getUniqueId())) {
+            return;
+        }
+        player.setVelocity(player.getVelocity().zero());
+        teleportSafe(player, arena.spectator());
+        sendArenaExitBlockedMessage(player);
+    }
+
     public void handleUnauthorizedArenaEntry(Player player) {
         requirePrimaryThread();
         teleportToExit(player);
@@ -770,7 +795,39 @@ public final class DuelService {
         return false;
     }
 
+    public boolean isWatchedSpectator(UUID playerId) {
+        return playerId != null && watchedSpectators.containsKey(playerId);
+    }
+
+    public boolean isWatchedSpectatorCommandBlocked(Player player) {
+        return player != null
+            && isWatchedSpectator(player.getUniqueId())
+            && !player.hasPermission("warzoneduels.bypass.enter");
+    }
+
+    public boolean isWatchedSpectatorTeleportBlocked(Player player, Location to, org.bukkit.event.player.PlayerTeleportEvent.TeleportCause cause) {
+        if (player == null || !isWatchedSpectator(player.getUniqueId()) || player.hasPermission("warzoneduels.bypass.enter")) {
+            return false;
+        }
+        if (cause == org.bukkit.event.player.PlayerTeleportEvent.TeleportCause.SPECTATE) {
+            return true;
+        }
+        return arena == null || to == null || !arena.contains(to);
+    }
+
+    public boolean isWatchedSpectatorLeaving(Player player, Location to) {
+        return player != null
+            && to != null
+            && isWatchedSpectator(player.getUniqueId())
+            && !player.hasPermission("warzoneduels.bypass.enter")
+            && arena != null
+            && !arena.contains(to);
+    }
+
     public boolean isBlockBreakAllowed(Block block, Player player) {
+        if (player != null && player.hasPermission("warzoneduels.bypass.build")) {
+            return true;
+        }
         if (arena != null && arena.contains(block.getLocation()) && activeDuel == null) {
             return false;
         }
@@ -796,6 +853,9 @@ public final class DuelService {
     }
 
     public boolean isBlockPlaceAllowed(Block block, Material itemType, Player player) {
+        if (player != null && player.hasPermission("warzoneduels.bypass.build")) {
+            return true;
+        }
         if (arena != null && arena.contains(block.getLocation()) && activeDuel == null) {
             return false;
         }
@@ -935,6 +995,9 @@ public final class DuelService {
         if (arena == null || location == null || !arena.contains(location)) {
             return false;
         }
+        if (player != null && player.hasPermission("warzoneduels.bypass.build")) {
+            return false;
+        }
         if (activeDuel == null) {
             return true;
         }
@@ -948,7 +1011,7 @@ public final class DuelService {
         if (!blockCombatEntry || player == null || combatTagPort == null || arena == null || to == null) {
             return false;
         }
-        if (isInActiveDuel(player.getUniqueId())) {
+        if (isInActiveDuel(player.getUniqueId()) || player.hasPermission("warzoneduels.bypass.enter")) {
             return false;
         }
         if (!arena.contains(to) || (from != null && arena.contains(from))) {
@@ -961,7 +1024,7 @@ public final class DuelService {
         if (player == null || arena == null || to == null) {
             return false;
         }
-        if (isInActiveDuel(player.getUniqueId())) {
+        if (isInActiveDuel(player.getUniqueId()) || player.hasPermission("warzoneduels.bypass.enter")) {
             return false;
         }
         return arenaTerrainService.isOnOrInsideFootprintBlock(to);
@@ -1002,6 +1065,13 @@ public final class DuelService {
             return true;
         }
         return !isInActiveDuel(victim.getUniqueId()) || !isInActiveDuel(attacker.getUniqueId());
+    }
+
+    public boolean shouldCancelArenaSpectatorDamage(Player player) {
+        return player != null
+            && arena != null
+            && arena.contains(player.getLocation())
+            && !isInActiveDuel(player.getUniqueId());
     }
 
     public void allowArenaItemPickup(UUID itemEntityId) {
@@ -1414,6 +1484,7 @@ public final class DuelService {
         cancelVictoryTask();
         cancelContainmentTask();
         rebuildParticipantIndex();
+        clearWatchedSpectators(true);
         cleanupArenaAfterMatch(finishedDuel, true);
     }
 
@@ -1424,6 +1495,27 @@ public final class DuelService {
         for (UUID playerId : List.of(duel.participantOne().playerId(), duel.participantTwo().playerId())) {
             Player player = Bukkit.getPlayer(playerId);
             if (player != null && player.isOnline() && !player.isDead()) {
+                teleportToExit(player);
+            }
+        }
+    }
+
+    private void clearWatchedSpectators(boolean teleportOut) {
+        if (watchedSpectators.isEmpty()) {
+            return;
+        }
+        Map<UUID, GameMode> previousModes = Map.copyOf(watchedSpectators);
+        for (Map.Entry<UUID, GameMode> entry : previousModes.entrySet()) {
+            Player player = Bukkit.getPlayer(entry.getKey());
+            if (player == null || !player.isOnline()) {
+                continue;
+            }
+            watchedSpectators.remove(entry.getKey());
+            GameMode previousMode = entry.getValue() == null ? GameMode.SURVIVAL : entry.getValue();
+            if (player.getGameMode() == GameMode.SPECTATOR) {
+                player.setGameMode(previousMode);
+            }
+            if (teleportOut && !player.isDead()) {
                 teleportToExit(player);
             }
         }
@@ -1636,16 +1728,18 @@ public final class DuelService {
     }
 
     private void startContainmentMonitor() {
-        if (activeDuel == null || containmentTask != null) {
+        if ((activeDuel == null && watchedSpectators.isEmpty()) || containmentTask != null) {
             return;
         }
         containmentTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (activeDuel == null) {
+                clearWatchedSpectators(true);
                 cancelContainmentTask();
                 return;
             }
             enforceParticipantContainment(activeDuel.participantOne().playerId());
             enforceParticipantContainment(activeDuel.participantTwo().playerId());
+            enforceWatchedSpectatorContainment();
         }, 5L, 5L);
     }
 
@@ -1656,6 +1750,28 @@ public final class DuelService {
         }
         if (!isParticipantInsideAllowedArena(player.getLocation())) {
             handleArenaExitAttempt(player);
+        }
+    }
+
+    private void enforceWatchedSpectatorContainment() {
+        if (watchedSpectators.isEmpty() || arena == null) {
+            return;
+        }
+        for (UUID playerId : List.copyOf(watchedSpectators.keySet())) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player == null || !player.isOnline()) {
+                watchedSpectators.remove(playerId);
+                continue;
+            }
+            if (player.hasPermission("warzoneduels.bypass.enter")) {
+                continue;
+            }
+            if (player.getGameMode() != GameMode.SPECTATOR) {
+                player.setGameMode(GameMode.SPECTATOR);
+            }
+            if (!arena.contains(player.getLocation())) {
+                handleWatchedSpectatorExitAttempt(player);
+            }
         }
     }
 

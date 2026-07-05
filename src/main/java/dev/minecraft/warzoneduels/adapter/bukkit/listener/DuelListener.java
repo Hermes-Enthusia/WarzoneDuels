@@ -26,6 +26,7 @@ import org.bukkit.event.block.BlockIgniteEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.BlockSpreadEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
@@ -367,10 +368,16 @@ public final class DuelListener implements Listener {
         }
         Entity entity = event.getEntity();
         if (!duelService.arena().contains(event.getLocation())) {
+            event.blockList().removeIf(block -> duelService.isInsideArenaShell(block.getLocation()));
+            if (event.blockList().isEmpty()) {
+                event.setYield(0F);
+            }
             return;
         }
         Material material = resolveExplosionMaterial(entity);
         if (material == null) {
+            event.blockList().clear();
+            event.setYield(0F);
             return;
         }
         duelService.clearExplosionSource(entity.getUniqueId());
@@ -415,19 +422,34 @@ public final class DuelListener implements Listener {
             vanillaBlockExplosionBlocks.remove(blockExplosionKey(event));
             return;
         }
-        if (duelService.arena() != null && duelService.arena().contains(event.getBlock().getLocation())) {
-            event.setCancelled(false);
-            event.setYield(0F);
-            List<org.bukkit.block.Block> vanillaBlocks = vanillaBlockExplosionBlocks.remove(blockExplosionKey(event));
-            List<org.bukkit.block.Block> sourceBlocks = vanillaBlocks == null ? new ArrayList<>(event.blockList()) : vanillaBlocks;
-            event.blockList().clear();
-            if (duelService.shouldExplosionsDamageBlocks()) {
-                for (org.bukkit.block.Block block : sourceBlocks) {
-                    if (duelService.isArenaTerrainBlock(block.getLocation())) {
-                        event.blockList().add(block);
-                    }
+        if (duelService.arena() == null || !duelService.arena().contains(event.getBlock().getLocation())) {
+            event.blockList().removeIf(block -> duelService.isInsideArenaShell(block.getLocation()));
+            if (event.blockList().isEmpty()) {
+                event.setYield(0F);
+            }
+            return;
+        }
+        event.setCancelled(false);
+        event.setYield(0F);
+        List<org.bukkit.block.Block> vanillaBlocks = vanillaBlockExplosionBlocks.remove(blockExplosionKey(event));
+        List<org.bukkit.block.Block> sourceBlocks = vanillaBlocks == null ? new ArrayList<>(event.blockList()) : vanillaBlocks;
+        event.blockList().clear();
+        if (duelService.shouldExplosionsDamageBlocks()) {
+            for (org.bukkit.block.Block block : sourceBlocks) {
+                if (duelService.isArenaTerrainBlock(block.getLocation())) {
+                    event.blockList().add(block);
                 }
             }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onGenericDamage(EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        if (duelService.shouldCancelArenaSpectatorDamage(player)) {
+            event.setCancelled(true);
         }
     }
 
@@ -527,6 +549,11 @@ public final class DuelListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
         Location to = event.getTo();
+        if (duelService.isWatchedSpectatorLeaving(event.getPlayer(), to)) {
+            event.setTo(event.getFrom());
+            duelService.handleWatchedSpectatorExitAttempt(event.getPlayer());
+            return;
+        }
         if (duelService.shouldBlockArenaFootprintEntry(event.getPlayer(), to)) {
             event.setTo(event.getFrom());
             duelService.sendArenaEntryBlockedMessage(event.getPlayer());
@@ -569,6 +596,11 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onCommand(PlayerCommandPreprocessEvent event) {
+        if (duelService.isWatchedSpectatorCommandBlocked(event.getPlayer())) {
+            event.setCancelled(true);
+            duelService.sendMessage(event.getPlayer(), "messages.blocked-command");
+            return;
+        }
         if (!duelService.isParticipantRestricted(event.getPlayer().getUniqueId())) {
             return;
         }
@@ -581,6 +613,11 @@ public final class DuelListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onTeleport(PlayerTeleportEvent event) {
         if (duelService.isTeleportAllowed(event.getPlayer().getUniqueId())) {
+            return;
+        }
+        if (duelService.isWatchedSpectatorTeleportBlocked(event.getPlayer(), event.getTo(), event.getCause())) {
+            event.setCancelled(true);
+            duelService.sendMessage(event.getPlayer(), "messages.teleport-blocked");
             return;
         }
         if (!duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
