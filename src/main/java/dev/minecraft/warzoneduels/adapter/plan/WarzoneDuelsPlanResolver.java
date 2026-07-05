@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.FormatStyle;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,8 +28,23 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+@SuppressWarnings({"PMD.UseConcurrentHashMap", "PMD.AvoidInstantiatingObjectsInLoops"})
 public final class WarzoneDuelsPlanResolver implements Resolver {
-    private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
+    private static final String METHOD_GET = "GET";
+    private static final String QUERY_PLAYER = "player";
+    private static final int HOURS_PER_DAY = 24;
+    private static final int DAYS_PER_WEEK = 7;
+    private static final int DAYS_PER_MONTH = 30;
+    private static final int PLAYER_HISTORY_DAYS = 3650;
+    private static final int DEFAULT_RECENT_DUELS_LIMIT = 20;
+    private static final int PLAYER_RECENT_DUELS_LIMIT = 15;
+    private static final int RECENT_OPPONENT_LIMIT = 5;
+    private static final int TOP_USAGE_LIMIT = 8;
+    private static final double MONEY_EPSILON = 0.0001D;
+    private static final DateTimeFormatter DATE_TIME = DateTimeFormatter
+        .ofLocalizedDateTime(FormatStyle.MEDIUM)
+        .withLocale(Locale.US)
+        .withZone(ZoneId.systemDefault());
 
     private final WarzoneDuelsPlugin plugin;
     private final StatsService statsService;
@@ -53,7 +69,7 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
 
     @Override
     public Optional<Response> resolve(Request request) {
-        if (!"GET".equalsIgnoreCase(request.getMethod())) {
+        if (!METHOD_GET.equalsIgnoreCase(request.getMethod())) {
             return Optional.empty();
         }
 
@@ -77,19 +93,19 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
     private Map<String, Object> buildJson(URIQuery query) {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("totalDuels", analyticsService.countTotalDuels());
-        root.put("duels24h", analyticsService.countDuelsSince(Duration.ofHours(24)));
-        root.put("duels7d", analyticsService.countDuelsSince(Duration.ofDays(7)));
-        root.put("duels30d", analyticsService.countDuelsSince(Duration.ofDays(30)));
+        root.put("duels24h", analyticsService.countDuelsSince(Duration.ofHours(HOURS_PER_DAY)));
+        root.put("duels7d", analyticsService.countDuelsSince(Duration.ofDays(DAYS_PER_WEEK)));
+        root.put("duels30d", analyticsService.countDuelsSince(Duration.ofDays(DAYS_PER_MONTH)));
         root.put("activeDuels", duelService.hasActiveDuel() ? 1 : 0);
-        root.put("mostUsedMap", analyticsService.mostUsedMapSince(Duration.ofDays(30)));
-        root.put("mostUsedRuleset", analyticsService.mostUsedRulesSince(Duration.ofDays(30)));
-        int recentLimit = Math.max(5, plugin.getConfig().getInt("analytics.recent-duels-limit", 20));
+        root.put("mostUsedMap", analyticsService.mostUsedMapSince(Duration.ofDays(DAYS_PER_MONTH)));
+        root.put("mostUsedRuleset", analyticsService.mostUsedRulesSince(Duration.ofDays(DAYS_PER_MONTH)));
+        int recentLimit = Math.max(RECENT_OPPONENT_LIMIT, plugin.getConfig().getInt("analytics.recent-duels-limit", DEFAULT_RECENT_DUELS_LIMIT));
         root.put("recentDuels", serializeRecentDuels(analyticsService.recentDuels(recentLimit)));
 
-        query.get("player").ifPresent(playerQuery -> {
+        query.get(QUERY_PLAYER).ifPresent(playerQuery -> {
             PlayerLookup lookup = findPlayer(playerQuery);
             if (lookup != null) {
-                root.put("player", buildPlayerJson(lookup));
+                root.put(QUERY_PLAYER, buildPlayerJson(lookup));
             }
         });
         return root;
@@ -100,25 +116,41 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
         PlayerDuelStats stats = lookup.stats();
         player.put("playerId", lookup.playerId().toString());
         player.put("name", lookup.name());
-        player.put("matchesPlayed", stats == null ? analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(3650)) : stats.matchesPlayed());
+        player.put("matchesPlayed", stats == null ? analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(PLAYER_HISTORY_DAYS)) : stats.matchesPlayed());
         player.put("wins", stats == null ? 0 : stats.wins());
         player.put("losses", stats == null ? 0 : stats.losses());
         player.put("draws", stats == null ? 0 : stats.draws());
         player.put("currentStreak", stats == null ? 0 : stats.currentWinStreak());
         player.put("bestStreak", stats == null ? 0 : stats.bestWinStreak());
-        player.put("duels24h", analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofHours(24)));
-        player.put("duels7d", analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(7)));
-        player.put("duels30d", analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(30)));
+        player.put("duels24h", analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofHours(HOURS_PER_DAY)));
+        player.put("duels7d", analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(DAYS_PER_WEEK)));
+        player.put("duels30d", analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(DAYS_PER_MONTH)));
         player.put("mostUsedMap", analyticsService.mostPlayedMapForPlayer(lookup.playerId()));
         player.put("mostUsedRuleset", analyticsService.mostPlayedRulesForPlayer(lookup.playerId()));
-        player.put("recentOpponents", analyticsService.recentOpponents(lookup.playerId(), 5));
-        player.put("recentDuels", serializeRecentDuels(analyticsService.recentDuelsForPlayer(lookup.playerId(), 15)));
+        player.put("recentOpponents", analyticsService.recentOpponents(lookup.playerId(), RECENT_OPPONENT_LIMIT));
+        player.put("recentDuels", serializeRecentDuels(analyticsService.recentDuelsForPlayer(lookup.playerId(), PLAYER_RECENT_DUELS_LIMIT)));
         return player;
     }
 
     private String renderHtml(URIQuery query) {
-        PlayerLookup lookup = query.get("player").map(this::findPlayer).orElse(null);
+        PlayerLookup lookup = query.get(QUERY_PLAYER).map(this::findPlayer).orElse(null);
         StringBuilder html = new StringBuilder(20_000);
+        appendPageStart(html);
+        appendSearchForm(html, query);
+        renderSummaryCards(html);
+        int recentLimit = Math.max(RECENT_OPPONENT_LIMIT, plugin.getConfig().getInt("analytics.recent-duels-limit", DEFAULT_RECENT_DUELS_LIMIT));
+        renderRecentDuels(html, analyticsService.recentDuels(recentLimit));
+        if (lookup != null) {
+            renderPlayerSection(html, lookup);
+        } else {
+            appendEmptyPlayerFocus(html);
+        }
+        renderArenaSection(html);
+        html.append("</div></body></html>");
+        return html.toString();
+    }
+
+    private void appendPageStart(StringBuilder html) {
         html.append("""
             <!DOCTYPE html>
             <html>
@@ -175,6 +207,9 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
 
         html.append("<h1>WarzoneDuels Dashboard</h1>");
         html.append("<div class=\"sub\">Recent duels, player history, and arena usage at a glance.</div>");
+    }
+
+    private void appendSearchForm(StringBuilder html, URIQuery query) {
         html.append("""
             <form class="search" method="get" action="/warzone-duels">
               <input type="text" name="player" placeholder="Player name or UUID" value="%s">
@@ -182,24 +217,16 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
               <a class="button secondary" href="/warzone-duels">Clear</a>
               <a class="button secondary" href="/warzone-duels/api?format=json">JSON</a>
             </form>
-            """.formatted(escapeHtml(query.get("player").orElse(""))));
+            """.formatted(escapeHtml(query.get(QUERY_PLAYER).orElse(""))));
+    }
 
-        renderSummaryCards(html);
-        int recentLimit = Math.max(5, plugin.getConfig().getInt("analytics.recent-duels-limit", 20));
-        renderRecentDuels(html, analyticsService.recentDuels(recentLimit));
-        if (lookup != null) {
-            renderPlayerSection(html, lookup);
-        } else {
-            html.append("""
-                <div class="section panel"><div class="inner">
-                  <h2>Player Focus</h2>
-                  <div class="muted">Enter a player name or UUID above to inspect duel history and player-specific stats.</div>
-                </div></div>
-                """);
-        }
-        renderArenaSection(html);
-        html.append("</div></body></html>");
-        return html.toString();
+    private void appendEmptyPlayerFocus(StringBuilder html) {
+        html.append("""
+            <div class="section panel"><div class="inner">
+              <h2>Player Focus</h2>
+              <div class="muted">Enter a player name or UUID above to inspect duel history and player-specific stats.</div>
+            </div></div>
+            """);
     }
 
     private void renderSummaryCards(StringBuilder html) {
@@ -207,10 +234,10 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
         appendCards(
             html,
             card("Total Duels", formatNumber(analyticsService.countTotalDuels())),
-            card("Duels 24h", formatNumber(analyticsService.countDuelsSince(Duration.ofHours(24)))),
-            card("Duels 7d", formatNumber(analyticsService.countDuelsSince(Duration.ofDays(7)))),
+            card("Duels 24h", formatNumber(analyticsService.countDuelsSince(Duration.ofHours(HOURS_PER_DAY)))),
+            card("Duels 7d", formatNumber(analyticsService.countDuelsSince(Duration.ofDays(DAYS_PER_WEEK)))),
             card("Active Duels", duelService.hasActiveDuel() ? "1" : "0"),
-            card("Most Used Map", analyticsService.mostUsedMapSince(Duration.ofDays(30)))
+            card("Most Used Map", analyticsService.mostUsedMapSince(Duration.ofDays(DAYS_PER_MONTH)))
         );
         html.append("</div>");
     }
@@ -261,25 +288,43 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
     private void renderPlayerSection(StringBuilder html, PlayerLookup lookup) {
         PlayerDuelStats stats = lookup.stats();
         String displayName = stats != null ? stats.lastKnownName() : lookup.name();
+        appendPlayerHeader(html, displayName);
+        appendPlayerCards(html, lookup, stats);
+        appendPlayerSummary(html, lookup, stats);
+        appendRecentPlayerDuels(html, lookup);
+        html.append("""
+                    </tbody>
+                  </table>
+                </div></div>
+              </div>
+            """);
+    }
+
+    private void appendPlayerHeader(StringBuilder html, String displayName) {
         html.append("""
             <div class="section panel">
               <div class="inner">
                 <h2>Player Focus: %s</h2>
                 <div class="grid cards">
             """.formatted(escapeHtml(displayName)));
+    }
+
+    private void appendPlayerCards(StringBuilder html, PlayerLookup lookup, PlayerDuelStats stats) {
         appendCards(
             html,
-            card("Matches", formatNumber(stats == null ? analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(3650)) : stats.matchesPlayed())),
+            card("Matches", formatNumber(stats == null ? analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(PLAYER_HISTORY_DAYS)) : stats.matchesPlayed())),
             card("Wins", formatNumber(stats == null ? 0 : stats.wins())),
             card("Losses", formatNumber(stats == null ? 0 : stats.losses())),
             card("Draws", formatNumber(stats == null ? 0 : stats.draws())),
             card("Current Streak", formatNumber(stats == null ? 0 : stats.currentWinStreak())),
             card("Best Streak", formatNumber(stats == null ? 0 : stats.bestWinStreak())),
-            card("24h", formatNumber(analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofHours(24)))),
-            card("7d", formatNumber(analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(7))))
+            card("24h", formatNumber(analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofHours(HOURS_PER_DAY)))),
+            card("7d", formatNumber(analyticsService.countDuelsForPlayerSince(lookup.playerId(), Duration.ofDays(DAYS_PER_WEEK))))
         );
         html.append("</div>");
+    }
 
+    private void appendPlayerSummary(StringBuilder html, PlayerLookup lookup, PlayerDuelStats stats) {
         html.append("""
                 <div class="split" style="margin-top: 14px;">
                   <div class="panel"><div class="inner">
@@ -292,7 +337,7 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
             row("Most Used Map", analyticsService.mostPlayedMapForPlayer(lookup.playerId())),
             row("Most Used Ruleset", analyticsService.mostPlayedRulesForPlayer(lookup.playerId())),
             row("Disconnect Losses", stats == null ? "0" : String.valueOf(stats.disconnectForfeitLosses())),
-            row("Recent Opponents", renderEntries(analyticsService.recentOpponents(lookup.playerId(), 5)))
+            row("Recent Opponents", renderEntries(analyticsService.recentOpponents(lookup.playerId(), RECENT_OPPONENT_LIMIT)))
         );
         html.append("""
                       </tbody>
@@ -312,8 +357,10 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
                       </thead>
                       <tbody>
             """);
+    }
 
-        List<DuelRecord> records = analyticsService.recentDuelsForPlayer(lookup.playerId(), 15);
+    private void appendRecentPlayerDuels(StringBuilder html, PlayerLookup lookup) {
+        List<DuelRecord> records = analyticsService.recentDuelsForPlayer(lookup.playerId(), PLAYER_RECENT_DUELS_LIMIT);
         if (records.isEmpty()) {
             html.append("<tr><td colspan=\"5\" class=\"muted\">No duel history found for this player.</td></tr>");
         } else {
@@ -327,13 +374,6 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
                 html.append("</tr>");
             }
         }
-
-        html.append("""
-                      </tbody>
-                    </table>
-                  </div></div>
-                </div>
-            """);
     }
 
     private void renderArenaSection(StringBuilder html) {
@@ -345,9 +385,9 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
             """);
         appendRows(
             html,
-            renderUsageTable("Most Used Maps (30d)", analyticsService.topMapsSince(Duration.ofDays(30), 8)),
-            renderUsageTable("Most Used Rulesets (30d)", analyticsService.topRulesSince(Duration.ofDays(30), 8)),
-            renderUsageTable("End Reasons (30d)", analyticsService.topEndReasonsSince(Duration.ofDays(30), 8))
+            renderUsageTable("Most Used Maps (30d)", analyticsService.topMapsSince(Duration.ofDays(DAYS_PER_MONTH), TOP_USAGE_LIMIT)),
+            renderUsageTable("Most Used Rulesets (30d)", analyticsService.topRulesSince(Duration.ofDays(DAYS_PER_MONTH), TOP_USAGE_LIMIT)),
+            renderUsageTable("End Reasons (30d)", analyticsService.topEndReasonsSince(Duration.ofDays(DAYS_PER_MONTH), TOP_USAGE_LIMIT))
         );
         html.append("</div></div></div>");
     }
@@ -467,7 +507,7 @@ public final class WarzoneDuelsPlanResolver implements Resolver {
     }
 
     private String formatMoney(double value) {
-        if (Math.abs(value) < 0.0001D) {
+        if (Math.abs(value) < MONEY_EPSILON) {
             return "0";
         }
         return String.format(Locale.US, "%,.2f", value);
