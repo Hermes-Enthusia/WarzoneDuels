@@ -19,6 +19,19 @@ public final class DuelGui {
     private static final int[] MAP_SLOTS = {20, 22, 24};
     private static final String STATUS_ALLOWED = "Allowed";
     private static final String STATUS_BLOCKED = "Blocked";
+    private static final String LABEL_BACK = "Back";
+    private static final String LABEL_MAP = "Map";
+    private static final String LABEL_WIND_CHARGES = "Wind Charges";
+    private static final String LABEL_MACES = "Maces";
+    private static final String LABEL_CHORUS_FRUIT = "Chorus Fruit";
+    private static final String LABEL_SPEARS = "Spears";
+    private static final String LABEL_ELYTRAS = "Elytras";
+    private static final String LABEL_ENDER_CHESTS = "Ender Chests";
+    private static final String LABEL_EXPLOSIVES = "Explosives";
+    private static final String ACTION_CLICK_TO_EDIT = "Click to edit";
+    private static final String NO_WAGER_LABEL = "None";
+    private static final double WHOLE_AMOUNT_DIVISOR = 1D;
+    private static final double ZERO_AMOUNT = 0D;
 
     private DuelGui() {
     }
@@ -110,7 +123,7 @@ public final class DuelGui {
             ChatColor.GRAY + "Blocks placed during the duel can be broken.",
             ChatColor.GRAY + "Original map blocks stay protected."
         ));
-        inv.setItem(40, item(Material.ARROW, ChatColor.AQUA + "Back"));
+        inv.setItem(40, item(Material.ARROW, ChatColor.AQUA + LABEL_BACK));
         return inv;
     }
 
@@ -130,7 +143,7 @@ public final class DuelGui {
         inv.setItem(20, toggleItem(Material.END_CRYSTAL, "Crystals & Anchors", settings.isAllowCrystalsAnchors()));
         inv.setItem(22, toggleItem(Material.TNT_MINECART, "Explosive Minecarts", settings.isAllowExplosiveMinecarts()));
         inv.setItem(24, toggleItem(Material.TNT, "Other Explosive Blocks", settings.isAllowOtherExplosives()));
-        inv.setItem(36, item(Material.ARROW, ChatColor.AQUA + (returnToConfirm ? "Back to Review" : "Back")));
+        inv.setItem(36, item(Material.ARROW, ChatColor.AQUA + (returnToConfirm ? "Back to Review" : LABEL_BACK)));
         inv.setItem(40, item(Material.IRON_SWORD, ChatColor.GOLD + (returnToConfirm ? "Save and Return" : "Continue to Combat Items")));
         return inv;
     }
@@ -150,86 +163,9 @@ public final class DuelGui {
             ChatColor.YELLOW + "Left-click: " + ChatColor.WHITE + "enable or disable an item",
             ChatColor.YELLOW + "Right-click: " + ChatColor.WHITE + "edit pearl or wind cooldown"
         ));
+        addCombatRuleItems(inv, settings);
 
-        inv.setItem(20, combatToggleItem(
-            Material.ENDER_PEARL,
-            "Ender Pearls",
-            settings.isAllowEnderPearls(),
-            List.of(
-                ChatColor.GRAY + "Controls pearl movement inside the arena.",
-                ChatColor.GRAY + "Blocked pearls cannot be thrown at all."
-            ),
-            settings.getEnderPearlCooldownSeconds(),
-            true
-        ));
-        inv.setItem(22, combatToggleItem(
-            Material.WIND_CHARGE,
-            "Wind Charges",
-            settings.isAllowWindCharges(),
-            List.of(
-                ChatColor.GRAY + "Controls wind charge movement and utility.",
-                ChatColor.GRAY + "Blocked charges cannot be used at all."
-            ),
-            settings.getWindChargeCooldownSeconds(),
-            true
-        ));
-        inv.setItem(24, combatToggleItem(
-            Material.MACE,
-            "Maces",
-            settings.isAllowMaces(),
-            List.of(
-                ChatColor.GRAY + "Controls mace use during the duel.",
-                ChatColor.GRAY + "Disable this for non-mace formats."
-            ),
-            0,
-            false
-        ));
-        inv.setItem(29, combatToggleItem(
-            Material.CHORUS_FRUIT,
-            "Chorus Fruit",
-            settings.isAllowChorusFruit(),
-            List.of(
-                ChatColor.GRAY + "Controls chorus teleports and escapes.",
-                ChatColor.GRAY + "Blocked chorus fruit cannot be eaten."
-            ),
-            0,
-            false
-        ));
-        inv.setItem(31, combatToggleItem(
-            Material.DIAMOND_SPEAR,
-            "Spears",
-            settings.isAllowSpears(),
-            List.of(
-                ChatColor.GRAY + "Controls vanilla spear melee combat.",
-                ChatColor.GRAY + "Disable this for sword-focused formats."
-            ),
-            0,
-            false
-        ));
-        inv.setItem(33, combatToggleItem(
-            Material.ELYTRA,
-            "Elytras",
-            settings.isAllowElytras(),
-            List.of(
-                ChatColor.GRAY + "Controls glide-based movement in the arena.",
-                ChatColor.GRAY + "Disable this for grounded formats."
-            ),
-            0,
-            false
-        ));
-        inv.setItem(40, combatToggleItem(
-            Material.ENDER_CHEST,
-            "Ender Chests",
-            settings.isAllowEnderChests(),
-            List.of(
-                ChatColor.GRAY + "Controls physical ender chest access.",
-                ChatColor.GRAY + "Disabled means no mid-duel storage access."
-            ),
-            0,
-            false
-        ));
-
-        inv.setItem(45, item(Material.ARROW, ChatColor.AQUA + (returnToConfirm ? "Back to Review" : "Back"), ChatColor.GRAY + "Return to the previous setup step."));
+        inv.setItem(45, item(Material.ARROW, ChatColor.AQUA + (returnToConfirm ? "Back to Review" : LABEL_BACK), ChatColor.GRAY + "Return to the previous setup step."));
         inv.setItem(53, item(Material.GOLD_INGOT, ChatColor.GOLD + (returnToConfirm ? "Save and Return" : "Continue to Wager"), ChatColor.GRAY + (returnToConfirm ? "Return to the duel review screen." : "Lock in these combat rules and set the wager.")));
         return inv;
     }
@@ -247,26 +183,7 @@ public final class DuelGui {
             ChatColor.GRAY + "Use the buttons for quick adjustments.",
             ChatColor.GRAY + "Use the book for a custom amount."
         ));
-        inv.setItem(9, item(
-            Material.LIME_GLAZED_TERRACOTTA,
-            ChatColor.GREEN + "Raise by $1",
-            ChatColor.GRAY + "Fine adjustment."
-        ));
-        inv.setItem(10, item(
-            Material.LIME_CONCRETE,
-            ChatColor.GREEN + "Raise by $10",
-            ChatColor.GRAY + "Small reduction."
-        ));
-        inv.setItem(11, item(
-            Material.LIME_CONCRETE_POWDER,
-            ChatColor.GREEN + "Raise by $100",
-            ChatColor.GRAY + "Major reduction."
-        ));
-        inv.setItem(12, item(
-            Material.LIME_STAINED_GLASS,
-            ChatColor.GREEN + "Raise by $1000",
-            ChatColor.GRAY + "Largest reduction."
-        ));
+        addWagerAdjustmentItems(inv);
         inv.setItem(13, item(
             Material.GOLD_INGOT,
             ChatColor.GOLD + "Current Wager",
@@ -275,26 +192,6 @@ public final class DuelGui {
             "",
             ChatColor.DARK_GRAY + "Maximum: $" + formatAmount(maxWager),
             ChatColor.GRAY + "This is the amount each player risks."
-        ));
-        inv.setItem(14, item(
-            Material.RED_CONCRETE,
-            ChatColor.RED + "Lower by $1",
-            ChatColor.GRAY + "Fine adjustment."
-        ));
-        inv.setItem(15, item(
-            Material.RED_TERRACOTTA,
-            ChatColor.RED + "Lower by $10",
-            ChatColor.GRAY + "Small reduction."
-        ));
-        inv.setItem(16, item(
-            Material.REDSTONE_BLOCK,
-            ChatColor.RED + "Lower by $100",
-            ChatColor.GRAY + "Major reduction."
-        ));
-        inv.setItem(17, item(
-            Material.NETHER_BRICKS,
-            ChatColor.RED + "Lower by $1000",
-            ChatColor.GRAY + "Largest reduction."
         ));
         inv.setItem(31, item(
             Material.BOOK,
@@ -305,7 +202,7 @@ public final class DuelGui {
             "",
             ChatColor.YELLOW + "Click: " + ChatColor.WHITE + "enter custom amount"
         ));
-        inv.setItem(45, item(Material.ARROW, ChatColor.GRAY + (returnToConfirm ? "Back to Review" : "Back")));
+        inv.setItem(45, item(Material.ARROW, ChatColor.GRAY + (returnToConfirm ? "Back to Review" : LABEL_BACK)));
         inv.setItem(49, item(Material.BARRIER, ChatColor.RED + "Clear Wager", ChatColor.GRAY + "Reset the wager to $0."));
         inv.setItem(53, item(Material.LIME_CONCRETE, ChatColor.GREEN + (returnToConfirm ? "Save and Return" : "Continue"), ChatColor.GRAY + (returnToConfirm ? "Return to the duel review screen." : "Finish the setup review.")));
         return inv;
@@ -321,46 +218,46 @@ public final class DuelGui {
             ChatColor.RED + "Not keep inventory.",
             ChatColor.RED + "The loser risks the gear they bring."
         ));
-        inv.setItem(19, item(Material.FILLED_MAP, ChatColor.YELLOW + "Map",
-            value("Map", settings.getMapDisplayName()),
+        inv.setItem(19, item(Material.FILLED_MAP, ChatColor.YELLOW + LABEL_MAP,
+            value(LABEL_MAP, settings.getMapDisplayName()),
             "",
-            action("Click to edit")
+            action(ACTION_CLICK_TO_EDIT)
         ));
         inv.setItem(21, item(Material.BOOK, ChatColor.YELLOW + "Block Rules",
             value("Place", placeRuleState(settings)),
             value("Break", breakRuleState(settings)),
             "",
-            action("Click to edit")
+            action(ACTION_CLICK_TO_EDIT)
         ));
         inv.setItem(23, item(Material.IRON_SWORD, ChatColor.YELLOW + "Combat Items",
             value("Pearls", cooldownRuleState(settings.isAllowEnderPearls(), settings.getEnderPearlCooldownSeconds())),
-            value("Wind Charges", cooldownRuleState(settings.isAllowWindCharges(), settings.getWindChargeCooldownSeconds())),
-            value("Elytras", ruleState(settings.isAllowElytras())),
-            value("Maces", ruleState(settings.isAllowMaces())),
-            value("Spears", ruleState(settings.isAllowSpears())),
-            value("Chorus Fruit", ruleState(settings.isAllowChorusFruit())),
-            value("Ender Chests", ruleState(settings.isAllowEnderChests())),
+            value(LABEL_WIND_CHARGES, cooldownRuleState(settings.isAllowWindCharges(), settings.getWindChargeCooldownSeconds())),
+            value(LABEL_ELYTRAS, ruleState(settings.isAllowElytras())),
+            value(LABEL_MACES, ruleState(settings.isAllowMaces())),
+            value(LABEL_SPEARS, ruleState(settings.isAllowSpears())),
+            value(LABEL_CHORUS_FRUIT, ruleState(settings.isAllowChorusFruit())),
+            value(LABEL_ENDER_CHESTS, ruleState(settings.isAllowEnderChests())),
             "",
-            action("Click to edit")
+            action(ACTION_CLICK_TO_EDIT)
         ));
         inv.setItem(16, settings.shouldShowExplosivesConfiguration()
-            ? item(Material.TNT, ChatColor.YELLOW + "Explosives",
+            ? item(Material.TNT, ChatColor.YELLOW + LABEL_EXPLOSIVES,
                 value("Crystals / Anchors", boolState(settings.isAllowCrystalsAnchors())),
                 value("TNT Minecarts", boolState(settings.isAllowExplosiveMinecarts())),
                 value("TNT / Other", boolState(settings.isAllowOtherExplosives())),
                 "",
-                action("Click to edit"))
-            : item(Material.GRAY_DYE, ChatColor.YELLOW + "Explosives",
-                value("Explosives", settings.formatExplosives()),
+                action(ACTION_CLICK_TO_EDIT))
+            : item(Material.GRAY_DYE, ChatColor.YELLOW + LABEL_EXPLOSIVES,
+                value(LABEL_EXPLOSIVES, settings.formatExplosives()),
                 "",
                 ChatColor.DARK_RED + "No explosive configuration in this format."));
-        String wager = settings.getWager() > 0 ? "$" + formatAmount(settings.getWager() * 2D) : "None";
+        String wager = settings.getWager() > ZERO_AMOUNT ? "$" + formatAmount(settings.getWager() * 2D) : NO_WAGER_LABEL;
         inv.setItem(25, item(Material.GOLD_INGOT, ChatColor.YELLOW + "Wager",
             value("Total Wager", wager),
             "",
-            action("Click to edit")
+            action(ACTION_CLICK_TO_EDIT)
         ));
-        inv.setItem(36, item(Material.ARROW, ChatColor.GRAY + "Back"));
+        inv.setItem(36, item(Material.ARROW, ChatColor.GRAY + LABEL_BACK));
         inv.setItem(40, item(Material.LIME_WOOL, ChatColor.GREEN + "Send Duel Request"));
         inv.setItem(44, item(Material.BARRIER, ChatColor.RED + "Cancel"));
         return inv;
@@ -374,8 +271,8 @@ public final class DuelGui {
             ChatColor.RED + "Not keep inventory.",
             ChatColor.RED + "The loser risks the gear they bring."
         ));
-        inv.setItem(10, item(Material.FILLED_MAP, ChatColor.YELLOW + "Map",
-            value("Map", settings.getMapDisplayName())
+        inv.setItem(10, item(Material.FILLED_MAP, ChatColor.YELLOW + LABEL_MAP,
+            value(LABEL_MAP, settings.getMapDisplayName())
         ));
         inv.setItem(12, item(Material.BOOK, ChatColor.YELLOW + "Block Rules",
             value("Place", placeRuleState(settings)),
@@ -383,21 +280,21 @@ public final class DuelGui {
         ));
         inv.setItem(14, item(Material.IRON_SWORD, ChatColor.YELLOW + "Combat Items",
             value("Pearls", cooldownRuleState(settings.isAllowEnderPearls(), settings.getEnderPearlCooldownSeconds())),
-            value("Wind Charges", cooldownRuleState(settings.isAllowWindCharges(), settings.getWindChargeCooldownSeconds())),
-            value("Elytras", ruleState(settings.isAllowElytras())),
-            value("Maces", ruleState(settings.isAllowMaces())),
-            value("Spears", ruleState(settings.isAllowSpears())),
-            value("Chorus Fruit", ruleState(settings.isAllowChorusFruit())),
-            value("Ender Chests", ruleState(settings.isAllowEnderChests()))
+            value(LABEL_WIND_CHARGES, cooldownRuleState(settings.isAllowWindCharges(), settings.getWindChargeCooldownSeconds())),
+            value(LABEL_ELYTRAS, ruleState(settings.isAllowElytras())),
+            value(LABEL_MACES, ruleState(settings.isAllowMaces())),
+            value(LABEL_SPEARS, ruleState(settings.isAllowSpears())),
+            value(LABEL_CHORUS_FRUIT, ruleState(settings.isAllowChorusFruit())),
+            value(LABEL_ENDER_CHESTS, ruleState(settings.isAllowEnderChests()))
         ));
         inv.setItem(16, settings.shouldShowExplosivesConfiguration()
-            ? item(Material.TNT, ChatColor.YELLOW + "Explosives",
+            ? item(Material.TNT, ChatColor.YELLOW + LABEL_EXPLOSIVES,
                 value("Crystals / Anchors", boolState(settings.isAllowCrystalsAnchors())),
                 value("TNT Minecarts", boolState(settings.isAllowExplosiveMinecarts())),
                 value("TNT / Other", boolState(settings.isAllowOtherExplosives())))
-            : item(Material.GRAY_DYE, ChatColor.YELLOW + "Explosives",
-                value("Explosives", settings.formatExplosives())));
-        String wager = settings.getWager() > 0 ? "$" + formatAmount(settings.getWager() * 2D) : "None";
+            : item(Material.GRAY_DYE, ChatColor.YELLOW + LABEL_EXPLOSIVES,
+                value(LABEL_EXPLOSIVES, settings.formatExplosives())));
+        String wager = settings.getWager() > ZERO_AMOUNT ? "$" + formatAmount(settings.getWager() * 2D) : NO_WAGER_LABEL;
         inv.setItem(22, item(Material.GOLD_INGOT, ChatColor.YELLOW + "Wager",
             value("Total Wager", wager)
         ));
@@ -415,8 +312,8 @@ public final class DuelGui {
             "",
             ChatColor.RED + "Not keep inventory."
         ));
-        inv.setItem(19, item(Material.FILLED_MAP, ChatColor.YELLOW + "Map",
-            value("Map", settings.getMapDisplayName())
+        inv.setItem(19, item(Material.FILLED_MAP, ChatColor.YELLOW + LABEL_MAP,
+            value(LABEL_MAP, settings.getMapDisplayName())
         ));
         inv.setItem(21, item(Material.BOOK, ChatColor.YELLOW + "Block Rules",
             value("Place", placeRuleState(settings)),
@@ -424,26 +321,80 @@ public final class DuelGui {
         ));
         inv.setItem(23, item(Material.IRON_SWORD, ChatColor.YELLOW + "Combat Items",
             value("Pearls", cooldownRuleState(settings.isAllowEnderPearls(), settings.getEnderPearlCooldownSeconds())),
-            value("Wind Charges", cooldownRuleState(settings.isAllowWindCharges(), settings.getWindChargeCooldownSeconds())),
-            value("Elytras", ruleState(settings.isAllowElytras())),
-            value("Maces", ruleState(settings.isAllowMaces())),
-            value("Spears", ruleState(settings.isAllowSpears())),
-            value("Chorus Fruit", ruleState(settings.isAllowChorusFruit())),
-            value("Ender Chests", ruleState(settings.isAllowEnderChests()))
+            value(LABEL_WIND_CHARGES, cooldownRuleState(settings.isAllowWindCharges(), settings.getWindChargeCooldownSeconds())),
+            value(LABEL_ELYTRAS, ruleState(settings.isAllowElytras())),
+            value(LABEL_MACES, ruleState(settings.isAllowMaces())),
+            value(LABEL_SPEARS, ruleState(settings.isAllowSpears())),
+            value(LABEL_CHORUS_FRUIT, ruleState(settings.isAllowChorusFruit())),
+            value(LABEL_ENDER_CHESTS, ruleState(settings.isAllowEnderChests()))
         ));
         inv.setItem(25, settings.shouldShowExplosivesConfiguration()
-            ? item(Material.TNT, ChatColor.YELLOW + "Explosives",
+            ? item(Material.TNT, ChatColor.YELLOW + LABEL_EXPLOSIVES,
                 value("Crystals / Anchors", boolState(settings.isAllowCrystalsAnchors())),
                 value("TNT Minecarts", boolState(settings.isAllowExplosiveMinecarts())),
                 value("TNT / Other", boolState(settings.isAllowOtherExplosives())))
-            : item(Material.GRAY_DYE, ChatColor.YELLOW + "Explosives",
-                value("Explosives", settings.formatExplosives())));
-        String wager = settings.getWager() > 0 ? "$" + formatAmount(settings.getWager() * 2D) : "None";
+            : item(Material.GRAY_DYE, ChatColor.YELLOW + LABEL_EXPLOSIVES,
+                value(LABEL_EXPLOSIVES, settings.formatExplosives())));
+        String wager = settings.getWager() > ZERO_AMOUNT ? "$" + formatAmount(settings.getWager() * 2D) : NO_WAGER_LABEL;
         inv.setItem(31, item(Material.GOLD_INGOT, ChatColor.YELLOW + "Wager",
             value("Total Wager", wager)
         ));
         inv.setItem(44, item(Material.BARRIER, ChatColor.RED + "Close"));
         return inv;
+    }
+
+    private static void addCombatRuleItems(Inventory inv, DuelSettings settings) {
+        List<CombatRuleItem> rules = List.of(
+            new CombatRuleItem(20, Material.ENDER_PEARL, "Ender Pearls", settings.isAllowEnderPearls(), List.of(
+                ChatColor.GRAY + "Controls pearl movement inside the arena.",
+                ChatColor.GRAY + "Blocked pearls cannot be thrown at all."
+            ), settings.getEnderPearlCooldownSeconds(), true),
+            new CombatRuleItem(22, Material.WIND_CHARGE, LABEL_WIND_CHARGES, settings.isAllowWindCharges(), List.of(
+                ChatColor.GRAY + "Controls wind charge movement and utility.",
+                ChatColor.GRAY + "Blocked charges cannot be used at all."
+            ), settings.getWindChargeCooldownSeconds(), true),
+            new CombatRuleItem(24, Material.MACE, LABEL_MACES, settings.isAllowMaces(), List.of(
+                ChatColor.GRAY + "Controls mace use during the duel.",
+                ChatColor.GRAY + "Disable this for non-mace formats."
+            ), 0, false),
+            new CombatRuleItem(29, Material.CHORUS_FRUIT, LABEL_CHORUS_FRUIT, settings.isAllowChorusFruit(), List.of(
+                ChatColor.GRAY + "Controls chorus teleports and escapes.",
+                ChatColor.GRAY + "Blocked chorus fruit cannot be eaten."
+            ), 0, false),
+            new CombatRuleItem(31, Material.DIAMOND_SPEAR, LABEL_SPEARS, settings.isAllowSpears(), List.of(
+                ChatColor.GRAY + "Controls vanilla spear melee combat.",
+                ChatColor.GRAY + "Disable this for sword-focused formats."
+            ), 0, false),
+            new CombatRuleItem(33, Material.ELYTRA, LABEL_ELYTRAS, settings.isAllowElytras(), List.of(
+                ChatColor.GRAY + "Controls glide-based movement in the arena.",
+                ChatColor.GRAY + "Disable this for grounded formats."
+            ), 0, false),
+            new CombatRuleItem(40, Material.ENDER_CHEST, LABEL_ENDER_CHESTS, settings.isAllowEnderChests(), List.of(
+                ChatColor.GRAY + "Controls physical ender chest access.",
+                ChatColor.GRAY + "Disabled means no mid-duel storage access."
+            ), 0, false)
+        );
+        for (CombatRuleItem rule : rules) {
+            inv.setItem(rule.slot(), combatToggleItem(
+                rule.material(),
+                rule.label(),
+                rule.enabled(),
+                rule.description(),
+                rule.cooldownSeconds(),
+                rule.supportsCooldown()
+            ));
+        }
+    }
+
+    private static void addWagerAdjustmentItems(Inventory inv) {
+        inv.setItem(9, item(Material.LIME_GLAZED_TERRACOTTA, ChatColor.GREEN + "Raise by $1", ChatColor.GRAY + "Fine adjustment."));
+        inv.setItem(10, item(Material.LIME_CONCRETE, ChatColor.GREEN + "Raise by $10", ChatColor.GRAY + "Small reduction."));
+        inv.setItem(11, item(Material.LIME_CONCRETE_POWDER, ChatColor.GREEN + "Raise by $100", ChatColor.GRAY + "Major reduction."));
+        inv.setItem(12, item(Material.LIME_STAINED_GLASS, ChatColor.GREEN + "Raise by $1000", ChatColor.GRAY + "Largest reduction."));
+        inv.setItem(14, item(Material.RED_CONCRETE, ChatColor.RED + "Lower by $1", ChatColor.GRAY + "Fine adjustment."));
+        inv.setItem(15, item(Material.RED_TERRACOTTA, ChatColor.RED + "Lower by $10", ChatColor.GRAY + "Small reduction."));
+        inv.setItem(16, item(Material.REDSTONE_BLOCK, ChatColor.RED + "Lower by $100", ChatColor.GRAY + "Major reduction."));
+        inv.setItem(17, item(Material.NETHER_BRICKS, ChatColor.RED + "Lower by $1000", ChatColor.GRAY + "Largest reduction."));
     }
 
     private static ItemStack toggleItem(Material material, String label, boolean enabled) {
@@ -525,15 +476,15 @@ public final class DuelGui {
             ChatColor.DARK_GRAY + "Movement",
             "",
             ChatColor.GRAY + "Ender Pearls: " + ruleState(settings.isAllowEnderPearls(), settings.getEnderPearlCooldownSeconds()),
-            ChatColor.GRAY + "Wind Charges: " + ruleState(settings.isAllowWindCharges(), settings.getWindChargeCooldownSeconds()),
+            ChatColor.GRAY + LABEL_WIND_CHARGES + ": " + ruleState(settings.isAllowWindCharges(), settings.getWindChargeCooldownSeconds()),
             "",
             ChatColor.DARK_GRAY + "Weapons",
             "",
-            ChatColor.GRAY + "Maces: " + ruleState(settings.isAllowMaces()),
-            ChatColor.GRAY + "Chorus Fruit: " + ruleState(settings.isAllowChorusFruit()),
-            ChatColor.GRAY + "Spears: " + ruleState(settings.isAllowSpears()),
-            ChatColor.GRAY + "Elytras: " + ruleState(settings.isAllowElytras()),
-            ChatColor.GRAY + "Ender Chests: " + ruleState(settings.isAllowEnderChests())
+            ChatColor.GRAY + LABEL_MACES + ": " + ruleState(settings.isAllowMaces()),
+            ChatColor.GRAY + LABEL_CHORUS_FRUIT + ": " + ruleState(settings.isAllowChorusFruit()),
+            ChatColor.GRAY + LABEL_SPEARS + ": " + ruleState(settings.isAllowSpears()),
+            ChatColor.GRAY + LABEL_ELYTRAS + ": " + ruleState(settings.isAllowElytras()),
+            ChatColor.GRAY + LABEL_ENDER_CHESTS + ": " + ruleState(settings.isAllowEnderChests())
         };
     }
 
@@ -638,9 +589,20 @@ public final class DuelGui {
     }
 
     public static String formatAmount(double amount) {
-        if (amount % 1D == 0D) {
+        if (amount % WHOLE_AMOUNT_DIVISOR == ZERO_AMOUNT) {
             return String.valueOf((long) amount);
         }
         return String.format(Locale.US, "%.2f", amount);
+    }
+
+    private record CombatRuleItem(
+        int slot,
+        Material material,
+        String label,
+        boolean enabled,
+        List<String> description,
+        int cooldownSeconds,
+        boolean supportsCooldown
+    ) {
     }
 }
