@@ -59,6 +59,10 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class DuelListener implements Listener {
+    private static final String TELEPORT_BLOCKED_MESSAGE = "messages.teleport-blocked";
+    private static final int ARENA_BOUNDARY_RADIUS = 2;
+    private static final double GLIDE_DOWNWARD_VELOCITY = -0.35D;
+
     private final DuelService duelService;
     private final Map<UUID, List<org.bukkit.block.Block>> vanillaEntityExplosionBlocks = new ConcurrentHashMap<>();
     private final Map<String, List<org.bukkit.block.Block>> vanillaBlockExplosionBlocks = new ConcurrentHashMap<>();
@@ -236,53 +240,82 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
-        if (isProtectedArenaShellInteraction(event)) {
+        if (cancelProtectedInteraction(event) || cancelInactiveArenaExplosiveInteraction(event)) {
+            return;
+        }
+        if (duelService.runtimeState() == DuelRuntimeState.ACTIVE) {
+            handleActiveInteraction(event);
+        }
+    }
+
+    private boolean cancelProtectedInteraction(PlayerInteractEvent event) {
+        if (!isProtectedArenaShellInteraction(event)) {
+            return false;
+        }
+        event.setCancelled(true);
+        return true;
+    }
+
+    private boolean cancelInactiveArenaExplosiveInteraction(PlayerInteractEvent event) {
+        if (duelService.runtimeState() == DuelRuntimeState.ACTIVE || !isArenaShellExplosiveInteraction(event)) {
+            return false;
+        }
+        event.setCancelled(true);
+        return true;
+    }
+
+    private void handleActiveInteraction(PlayerInteractEvent event) {
+        if (!duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
+            return;
+        }
+        if (cancelBlockedEnderChest(event) || cancelBlockedRespawnAnchor(event)) {
+            return;
+        }
+        if (event.getItem() != null) {
+            handleHeldCombatItem(event, event.getItem().getType());
+        }
+    }
+
+    private boolean cancelBlockedEnderChest(PlayerInteractEvent event) {
+        if (!isRightClickBlock(event, Material.ENDER_CHEST) || duelService.canUseEnderChest(event.getPlayer())) {
+            return false;
+        }
+        event.setCancelled(true);
+        duelService.sendBlockedCombatItemMessage(event.getPlayer());
+        return true;
+    }
+
+    private boolean cancelBlockedRespawnAnchor(PlayerInteractEvent event) {
+        if (!isRightClickBlock(event, Material.RESPAWN_ANCHOR)) {
+            return false;
+        }
+        if (duelService.canUseExplosive(Material.RESPAWN_ANCHOR, event.getPlayer())) {
+            return true;
+        }
+        event.setCancelled(true);
+        duelService.sendBlockedCombatItemMessage(event.getPlayer());
+        return true;
+    }
+
+    private void handleHeldCombatItem(PlayerInteractEvent event, Material material) {
+        if (!duelService.isCombatItemEnabled(material, event.getPlayer())) {
             event.setCancelled(true);
+            duelService.sendBlockedCombatItemMessage(event.getPlayer());
             return;
         }
-        if (duelService.runtimeState() != DuelRuntimeState.ACTIVE && isArenaShellExplosiveInteraction(event)) {
+        if (!duelService.canUseCombatItem(material, event.getPlayer())) {
+            return;
+        }
+        if (!duelService.canUseExplosive(material, event.getPlayer())) {
             event.setCancelled(true);
-            return;
+            duelService.sendBlockedCombatItemMessage(event.getPlayer());
         }
-        if (duelService.runtimeState() != DuelRuntimeState.ACTIVE) {
-            return;
-        }
-        if (event.getAction() == Action.RIGHT_CLICK_BLOCK
+    }
+
+    private boolean isRightClickBlock(PlayerInteractEvent event, Material material) {
+        return event.getAction() == Action.RIGHT_CLICK_BLOCK
             && event.getClickedBlock() != null
-            && event.getClickedBlock().getType() == Material.ENDER_CHEST
-            && duelService.isInActiveDuel(event.getPlayer().getUniqueId())
-            && !duelService.canUseEnderChest(event.getPlayer())) {
-            event.setCancelled(true);
-            duelService.sendBlockedCombatItemMessage(event.getPlayer());
-            return;
-        }
-        if (event.getAction() == Action.RIGHT_CLICK_BLOCK
-            && event.getClickedBlock() != null
-            && event.getClickedBlock().getType() == Material.RESPAWN_ANCHOR
-            && duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
-            if (!duelService.canUseExplosive(Material.RESPAWN_ANCHOR, event.getPlayer())) {
-                event.setCancelled(true);
-                duelService.sendBlockedCombatItemMessage(event.getPlayer());
-                return;
-            }
-            return;
-        }
-        if (event.getItem() == null) {
-            return;
-        }
-        if (duelService.isInActiveDuel(event.getPlayer().getUniqueId()) && !duelService.isCombatItemEnabled(event.getItem().getType(), event.getPlayer())) {
-            event.setCancelled(true);
-            duelService.sendBlockedCombatItemMessage(event.getPlayer());
-            return;
-        }
-        if (duelService.isInActiveDuel(event.getPlayer().getUniqueId()) && !duelService.canUseCombatItem(event.getItem().getType(), event.getPlayer())) {
-            return;
-        }
-        if (duelService.isInActiveDuel(event.getPlayer().getUniqueId()) && !duelService.canUseExplosive(event.getItem().getType(), event.getPlayer())) {
-            event.setCancelled(true);
-            duelService.sendBlockedCombatItemMessage(event.getPlayer());
-            return;
-        }
+            && event.getClickedBlock().getType() == material;
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -455,63 +488,90 @@ public final class DuelListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onDamage(EntityDamageByEntityEvent event) {
-        if (event.getDamager() instanceof Firework firework && duelService.isVictoryFirework(firework.getUniqueId())) {
-            event.setCancelled(true);
+        if (cancelVictoryFireworkDamage(event)) {
             return;
         }
         if (event.getEntity() instanceof EnderCrystal crystal) {
-            Player attacker = resolveAttackingPlayer(event.getDamager());
-            if (duelService.arena() == null || !duelService.arena().contains(crystal.getLocation())) {
-                return;
-            }
-            if (attacker == null || !duelService.isInActiveDuel(attacker.getUniqueId())) {
-                event.setCancelled(true);
-                return;
-            }
-            if (!duelService.canUseExplosive(Material.END_CRYSTAL, attacker)) {
-                event.setCancelled(true);
-                duelService.sendBlockedCombatItemMessage(attacker);
-            }
+            handleCrystalDamage(event, crystal);
             return;
         }
         if (!(event.getEntity() instanceof Player victim)) {
             return;
         }
+        handlePlayerDamage(event, victim);
+    }
+
+    private boolean cancelVictoryFireworkDamage(EntityDamageByEntityEvent event) {
+        if (!(event.getDamager() instanceof Firework firework) || !duelService.isVictoryFirework(firework.getUniqueId())) {
+            return false;
+        }
+        event.setCancelled(true);
+        return true;
+    }
+
+    private void handleCrystalDamage(EntityDamageByEntityEvent event, EnderCrystal crystal) {
+        Player attacker = resolveAttackingPlayer(event.getDamager());
+        if (duelService.arena() == null || !duelService.arena().contains(crystal.getLocation())) {
+            return;
+        }
+        if (attacker == null || !duelService.isInActiveDuel(attacker.getUniqueId())) {
+            event.setCancelled(true);
+            return;
+        }
+        if (!duelService.canUseExplosive(Material.END_CRYSTAL, attacker)) {
+            event.setCancelled(true);
+            duelService.sendBlockedCombatItemMessage(attacker);
+        }
+    }
+
+    private void handlePlayerDamage(EntityDamageByEntityEvent event, Player victim) {
         Player attacker = resolveAttackingPlayer(event.getDamager());
         if (attacker != null && duelService.shouldBlockArenaShellPvp(victim, attacker)) {
             event.setCancelled(true);
             return;
         }
-        if (duelService.isInsideArenaShell(victim.getLocation())
-            && !duelService.isInActiveDuel(victim.getUniqueId())
-            && (event.getCause() == DamageCause.ENTITY_EXPLOSION || event.getCause() == DamageCause.BLOCK_EXPLOSION)) {
-            event.setCancelled(true);
+        if (cancelArenaShellExplosionDamage(event, victim)) {
             return;
         }
         if (!duelService.isInActiveDuel(victim.getUniqueId())) {
             return;
         }
         if (attacker != null) {
-            if (SpearUtil.isSpear(attacker.getInventory().getItemInMainHand())
-                && !duelService.isCombatItemEnabled(attacker.getInventory().getItemInMainHand().getType(), attacker)) {
-                event.setCancelled(true);
-                duelService.sendBlockedCombatItemMessage(attacker);
-                return;
-            }
-            if (!duelService.isCombatItemEnabled(attacker.getInventory().getItemInMainHand().getType(), attacker)) {
-                event.setCancelled(true);
-                duelService.sendBlockedCombatItemMessage(attacker);
-                return;
-            }
-            if (duelService.shouldCancelDamage(victim, attacker)) {
-                event.setCancelled(true);
-            }
+            handleAttackerDamage(event, victim, attacker);
             return;
         }
         if (event.getCause() == DamageCause.ENTITY_EXPLOSION || event.getDamager() instanceof TNTPrimed || event.getDamager() instanceof EnderCrystal) {
             return;
         }
         if (!(event.getDamager() instanceof Player) && duelService.isInActiveDuel(victim.getUniqueId())) {
+            event.setCancelled(true);
+        }
+    }
+
+    private boolean cancelArenaShellExplosionDamage(EntityDamageByEntityEvent event, Player victim) {
+        if (!duelService.isInsideArenaShell(victim.getLocation()) || duelService.isInActiveDuel(victim.getUniqueId())) {
+            return false;
+        }
+        if (event.getCause() != DamageCause.ENTITY_EXPLOSION && event.getCause() != DamageCause.BLOCK_EXPLOSION) {
+            return false;
+        }
+        event.setCancelled(true);
+        return true;
+    }
+
+    private void handleAttackerDamage(EntityDamageByEntityEvent event, Player victim, Player attacker) {
+        Material heldType = attacker.getInventory().getItemInMainHand().getType();
+        if (SpearUtil.isSpear(attacker.getInventory().getItemInMainHand()) && !duelService.isCombatItemEnabled(heldType, attacker)) {
+            event.setCancelled(true);
+            duelService.sendBlockedCombatItemMessage(attacker);
+            return;
+        }
+        if (!duelService.isCombatItemEnabled(heldType, attacker)) {
+            event.setCancelled(true);
+            duelService.sendBlockedCombatItemMessage(attacker);
+            return;
+        }
+        if (duelService.shouldCancelDamage(victim, attacker)) {
             event.setCancelled(true);
         }
     }
@@ -569,8 +629,8 @@ public final class DuelListener implements Listener {
         }
         if (!duelService.canUseCombatItem(Material.ELYTRA, event.getPlayer()) && event.getPlayer().isGliding()) {
             event.getPlayer().setGliding(false);
-            if (event.getPlayer().getVelocity().getY() > -0.35D) {
-                event.getPlayer().setVelocity(event.getPlayer().getVelocity().setY(-0.35D));
+            if (event.getPlayer().getVelocity().getY() > GLIDE_DOWNWARD_VELOCITY) {
+                event.getPlayer().setVelocity(event.getPlayer().getVelocity().setY(GLIDE_DOWNWARD_VELOCITY));
             }
         }
         if (to == null) {
@@ -583,7 +643,7 @@ public final class DuelListener implements Listener {
             }
             return;
         }
-        if (!duelService.isNearArenaTerrain(to, 2)) {
+        if (!duelService.isNearArenaTerrain(to, ARENA_BOUNDARY_RADIUS)) {
             event.setTo(event.getFrom());
             duelService.handleArenaExitAttempt(event.getPlayer());
             return;
@@ -617,7 +677,7 @@ public final class DuelListener implements Listener {
         }
         if (duelService.isWatchedSpectatorTeleportBlocked(event.getPlayer(), event.getTo(), event.getCause())) {
             event.setCancelled(true);
-            duelService.sendMessage(event.getPlayer(), "messages.teleport-blocked");
+            duelService.sendMessage(event.getPlayer(), TELEPORT_BLOCKED_MESSAGE);
             return;
         }
         if (!duelService.isInActiveDuel(event.getPlayer().getUniqueId())) {
@@ -629,16 +689,16 @@ public final class DuelListener implements Listener {
         }
         if (event.getCause() == TeleportCause.ENDER_PEARL && !duelService.isCombatItemEnabled(Material.ENDER_PEARL, event.getPlayer())) {
             event.setCancelled(true);
-            duelService.sendMessage(event.getPlayer(), "messages.teleport-blocked");
+            duelService.sendMessage(event.getPlayer(), TELEPORT_BLOCKED_MESSAGE);
             return;
         }
         if (event.getCause() == TeleportCause.CHORUS_FRUIT && !duelService.isCombatItemEnabled(Material.CHORUS_FRUIT, event.getPlayer())) {
             event.setCancelled(true);
-            duelService.sendMessage(event.getPlayer(), "messages.teleport-blocked");
+            duelService.sendMessage(event.getPlayer(), TELEPORT_BLOCKED_MESSAGE);
             return;
         }
         Location to = event.getTo();
-        if (to != null && event.getCause() == TeleportCause.CHORUS_FRUIT && !duelService.isNearArenaTerrain(to, 2)) {
+        if (to != null && event.getCause() == TeleportCause.CHORUS_FRUIT && !duelService.isNearArenaTerrain(to, ARENA_BOUNDARY_RADIUS)) {
             Location fallback = duelService.chorusFallbackDestination(event.getPlayer());
             if (fallback != null) {
                 event.setTo(fallback);
@@ -649,7 +709,7 @@ public final class DuelListener implements Listener {
         }
         if (to != null && !duelService.isAllowedDuelTeleportDestination(to)) {
             event.setCancelled(true);
-            duelService.sendMessage(event.getPlayer(), "messages.teleport-blocked");
+            duelService.sendMessage(event.getPlayer(), TELEPORT_BLOCKED_MESSAGE);
         }
     }
 
