@@ -30,6 +30,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.Color;
 import org.bukkit.FireworkEffect;
 import org.bukkit.GameMode;
+import org.bukkit.GameRule;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -111,6 +112,8 @@ public final class DuelService {
     private int startCountdownSeconds;
     private int victoryMomentSeconds;
     private boolean victoryFireworks;
+    private boolean spectatorReducedDebugInfo;
+    private Boolean previousReducedDebugInfo;
     private String matchmakingWorld;
     private int matchmakingMinX;
     private int matchmakingMaxX;
@@ -236,6 +239,7 @@ public final class DuelService {
         startCountdownSeconds = Math.max(0, config.getInt("settings.start-countdown-seconds", 5));
         victoryMomentSeconds = Math.max(0, config.getInt("settings.victory-moment-seconds", 6));
         victoryFireworks = config.getBoolean("settings.victory-fireworks", true);
+        spectatorReducedDebugInfo = config.getBoolean("settings.spectator-reduced-debug-info", true);
         matchmakingWorld = config.getString("matchmaking-spawn.world", config.getString("arena.world", "world"));
         matchmakingMinX = Math.min(config.getInt("matchmaking-spawn.corner1.x", -218), config.getInt("matchmaking-spawn.corner2.x", 219));
         matchmakingMaxX = Math.max(config.getInt("matchmaking-spawn.corner1.x", -218), config.getInt("matchmaking-spawn.corner2.x", 219));
@@ -557,6 +561,7 @@ public final class DuelService {
             return;
         }
         watchedSpectators.putIfAbsent(player.getUniqueId(), player.getGameMode());
+        enableSpectatorDebugProtection();
         player.setGameMode(GameMode.SPECTATOR);
         teleportSafe(player, arena.spectator());
         startContainmentMonitor();
@@ -1502,15 +1507,16 @@ public final class DuelService {
 
     private void clearWatchedSpectators(boolean teleportOut) {
         if (watchedSpectators.isEmpty()) {
+            restoreSpectatorDebugProtection();
             return;
         }
         Map<UUID, GameMode> previousModes = Map.copyOf(watchedSpectators);
         for (Map.Entry<UUID, GameMode> entry : previousModes.entrySet()) {
+            watchedSpectators.remove(entry.getKey());
             Player player = Bukkit.getPlayer(entry.getKey());
             if (player == null || !player.isOnline()) {
                 continue;
             }
-            watchedSpectators.remove(entry.getKey());
             GameMode previousMode = entry.getValue() == null ? GameMode.SURVIVAL : entry.getValue();
             if (player.getGameMode() == GameMode.SPECTATOR) {
                 player.setGameMode(previousMode);
@@ -1519,6 +1525,27 @@ public final class DuelService {
                 teleportToExit(player);
             }
         }
+        restoreSpectatorDebugProtection();
+    }
+
+    private void enableSpectatorDebugProtection() {
+        if (!spectatorReducedDebugInfo || arena == null || arena.spectator().getWorld() == null) {
+            return;
+        }
+        World world = arena.spectator().getWorld();
+        if (previousReducedDebugInfo == null) {
+            previousReducedDebugInfo = world.getGameRuleValue(GameRule.REDUCED_DEBUG_INFO);
+        }
+        world.setGameRule(GameRule.REDUCED_DEBUG_INFO, true);
+    }
+
+    private void restoreSpectatorDebugProtection() {
+        if (previousReducedDebugInfo == null || arena == null || arena.spectator().getWorld() == null) {
+            previousReducedDebugInfo = null;
+            return;
+        }
+        arena.spectator().getWorld().setGameRule(GameRule.REDUCED_DEBUG_INFO, previousReducedDebugInfo);
+        previousReducedDebugInfo = null;
     }
 
     private void startVictoryMoment(ActiveDuel finishedDuel, Player winner) {
@@ -1772,6 +1799,9 @@ public final class DuelService {
             if (!arena.contains(player.getLocation())) {
                 handleWatchedSpectatorExitAttempt(player);
             }
+        }
+        if (watchedSpectators.isEmpty()) {
+            restoreSpectatorDebugProtection();
         }
     }
 

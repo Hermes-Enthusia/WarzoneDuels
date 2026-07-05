@@ -89,6 +89,11 @@ settings:
   # Launch light celebration fireworks during the victory moment.
   victory-fireworks: true
 
+  # While players are watching with /duel watch, enable vanilla reducedDebugInfo in the arena world.
+  # This hides/minimizes F3 coordinates for that world until watched spectators are cleared.
+  # True coordinate spoofing is intentionally not used because it requires fragile packet hacks.
+  spectator-reduced-debug-info: true
+
   # Disconnect grace during an active duel before the offline player forfeits.
   disconnect-grace-seconds: 30
 
