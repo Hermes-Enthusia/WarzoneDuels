@@ -663,6 +663,10 @@ public final class DuelService {
             sendMessageOrFallback(player, null, ChatColor.RED + "You do not have permission to spectate duels.");
             return;
         }
+        if (isWatchedSpectator(player.getUniqueId())) {
+            sendMessageOrFallback(player, null, ChatColor.YELLOW + "You are already watching this duel.");
+            return;
+        }
         if (activeDuel == null) {
             sendMessageOrFallback(player, "messages.duel-watch-unavailable", ChatColor.RED + "There is no active duel to watch.");
             return;
@@ -677,7 +681,7 @@ public final class DuelService {
         }
         watchedSpectators.putIfAbsent(player.getUniqueId(), player.getGameMode());
         enableSpectatorDebugProtection();
-        player.setGameMode(GameMode.SPECTATOR);
+        player.setGameMode(GameMode.ADVENTURE);
         teleportSafe(player, arena.spectator());
         startContainmentMonitor();
         sendMessageOrFallback(player, "messages.duel-watch-teleported", ChatColor.GREEN + "Warped to the arena stands.");
@@ -796,9 +800,7 @@ public final class DuelService {
         requirePrimaryThread();
         GameMode watchedMode = watchedSpectators.remove(player.getUniqueId());
         if (watchedMode != null) {
-            if (player.getGameMode() == GameMode.SPECTATOR) {
-                player.setGameMode(watchedMode);
-            }
+            player.setGameMode(watchedMode);
             teleportToExit(player);
             return;
         }
@@ -1387,7 +1389,7 @@ public final class DuelService {
             case "setpos2" -> config.set("arena.pos2", value);
             case "setspawn1" -> config.set("arena.spawn1", value);
             case "setspawn2" -> config.set("arena.spawn2", value);
-            case "setspectator" -> config.set("arena.spectator", value);
+            case "setspectator", "setspectatorlocation" -> config.set("arena.spectator", value);
             case "setexit" -> config.set("arena.exit", value);
             default -> {
                 return;
@@ -1401,7 +1403,7 @@ public final class DuelService {
         return List.of(
             "accept", "deny", "review", "watch", "spectate", "stands", "draw", "surrender", "cancel", "vault", "stats", "info", "settings",
             "reload", "restoreloadout", "mapsave", "mapload", "mapstatus",
-            "setpos1", "setpos2", "setspawn1", "setspawn2", "setspectator", "setexit"
+            "setpos1", "setpos2", "setspawn1", "setspawn2", "setspectator", "setspectatorlocation", "setexit"
         );
     }
 
@@ -1637,9 +1639,7 @@ public final class DuelService {
                 continue;
             }
             GameMode previousMode = entry.getValue() == null ? GameMode.SURVIVAL : entry.getValue();
-            if (player.getGameMode() == GameMode.SPECTATOR) {
-                player.setGameMode(previousMode);
-            }
+            player.setGameMode(previousMode);
             if (teleportOut && !player.isDead()) {
                 teleportToExit(player);
             }

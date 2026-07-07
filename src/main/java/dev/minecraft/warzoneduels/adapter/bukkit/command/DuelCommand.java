@@ -81,7 +81,7 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
             case MAP_SAVE_COMMAND -> handleMapSave(player, args);
             case MAP_LOAD_COMMAND -> handleMapLoad(player, args);
             case "mapstatus" -> handleMapStatus(player);
-            case "setpos1", "setpos2", "setspawn1", "setspawn2", "setspectator", "setexit" -> handleArenaLocation(player, sub, args);
+            case "setpos1", "setpos2", "setspawn1", "setspawn2", "setspectator", "setspectatorlocation", "setexit" -> handleArenaLocation(player, sub, args);
             default -> handleTargetDuelStart(player, args);
         }
     }
@@ -164,7 +164,7 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     private void sendUsage(Player player) {
         player.sendMessage(ChatColor.YELLOW + "Usage: /duel <player|accept|deny|review|watch|draw|surrender|cancel|vault|stats|info|settings>");
         if (player.hasPermission(ADMIN_PERMISSION)) {
-            player.sendMessage(ChatColor.GRAY + "Admin: /duel <mapsave|mapload|mapstatus|reload|restoreloadout|setpos1|setpos2|setspawn1|setspawn2|setspectator|setexit>");
+            player.sendMessage(ChatColor.GRAY + "Admin: /duel <mapsave|mapload|mapstatus|reload|restoreloadout|setpos1|setpos2|setspawn1|setspawn2|setspectator|setspectatorlocation|setexit>");
         }
     }
 
