@@ -20,6 +20,7 @@ import java.util.Locale;
 
 public final class DuelCommand implements CommandExecutor, TabCompleter {
     private static final String ADMIN_PERMISSION = "warzoneduels.admin";
+    private static final String VAULT_PERMISSION = "warzoneduels.duel.vault";
     private static final String DRAW_COMMAND = "draw";
     private static final String SURRENDER_COMMAND = "surrender";
     private static final String RELOAD_COMMAND = "reload";
@@ -278,6 +279,10 @@ public final class DuelCommand implements CommandExecutor, TabCompleter {
     }
 
     private void openSpoils(Player player) {
+        if (!player.hasPermission(VAULT_PERMISSION)) {
+            duelService.sendMessage(player, "messages.no-permission");
+            return;
+        }
         List<SpoilsEntry> entries = spoilsService.getEntriesFor(player.getUniqueId());
         if (entries.isEmpty()) {
             spoilsService.sendNoSpoilsMessage(player);

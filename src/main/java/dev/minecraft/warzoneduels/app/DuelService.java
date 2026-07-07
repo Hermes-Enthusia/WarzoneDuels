@@ -19,6 +19,7 @@ import dev.minecraft.warzoneduels.domain.MatchParticipant;
 import dev.minecraft.warzoneduels.domain.stats.PlayerDuelStats;
 import dev.minecraft.warzoneduels.domain.terrain.ArenaMapOperationStatus;
 import dev.minecraft.warzoneduels.port.EconomyPort;
+import dev.minecraft.warzoneduels.port.PermissionPort;
 import dev.minecraft.warzoneduels.port.SpawnPort;
 import dev.minecraft.warzoneduels.port.CombatTagPort;
 import dev.minecraft.warzoneduels.util.SpearUtil;
@@ -74,8 +75,15 @@ public final class DuelService {
     private static final String MSG_TARGET_OFFLINE = "messages.target-offline";
     private static final String MSG_CANNOT_AFFORD = "messages.cannot-afford";
     private static final String MSG_NO_PENDING_REQUEST = "messages.no-pending-request";
+    private static final String MSG_NO_PERMISSION = "messages.no-permission";
     private static final String PERMISSION_BYPASS_BUILD = "warzoneduels.bypass.build";
     private static final String PERMISSION_BYPASS_ENTER = "warzoneduels.bypass.enter";
+    private static final String PERMISSION_DUEL_SEND = "warzoneduels.duel.send";
+    private static final String PERMISSION_DUEL_ACCEPT = "warzoneduels.duel.accept";
+    private static final String PERMISSION_DUEL_DENY = "warzoneduels.duel.deny";
+    private static final String PERMISSION_DUEL_DRAW = "warzoneduels.duel.draw";
+    private static final String PERMISSION_DUEL_SPECTATE = "warzoneduels.duel.spectate";
+    private static final String PERMISSION_DUEL_VAULT = "warzoneduels.duel.vault";
     private static final String PLAYER_PLACEHOLDER = "{player}";
     private static final double NO_WAGER = 0D;
     private static final long QUEUED_START_PERIOD_TICKS = 20L;
@@ -91,6 +99,7 @@ public final class DuelService {
     private final DuelAnalyticsService duelAnalyticsService;
     private final ArenaMapService arenaMapService;
     private final ArenaTerrainService arenaTerrainService;
+    private final PermissionPort permissionPort;
     private CombatTagPort combatTagPort;
 
     private final Map<UUID, BuilderSession> builders = new ConcurrentHashMap<>();
@@ -150,6 +159,7 @@ public final class DuelService {
         WarzoneDuelsPlugin plugin,
         EconomyPort economyPort,
         SpawnPort spawnPort,
+        PermissionPort permissionPort,
         RuntimeStateStore runtimeStateStore,
         LoadoutArchiveStore loadoutArchiveStore,
         ArenaResetService arenaResetService,
@@ -171,6 +181,7 @@ public final class DuelService {
         this.duelAnalyticsService = duelAnalyticsService;
         this.arenaMapService = arenaMapService;
         this.arenaTerrainService = arenaTerrainService;
+        this.permissionPort = permissionPort;
         this.combatTagPort = combatTagPort;
     }
 
@@ -333,6 +344,10 @@ public final class DuelService {
 
     public void startBuilder(Player sender, Player target) {
         requirePrimaryThread();
+        if (!permissionPort.has(sender, PERMISSION_DUEL_SEND)) {
+            sendMessage(sender, MSG_NO_PERMISSION);
+            return;
+        }
         if (rejectBuilderStart(sender, target)) {
             return;
         }
@@ -476,6 +491,10 @@ public final class DuelService {
 
     public void acceptRequest(Player target) {
         requirePrimaryThread();
+        if (!permissionPort.has(target, PERMISSION_DUEL_ACCEPT)) {
+            sendMessage(target, MSG_NO_PERMISSION);
+            return;
+        }
         if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
             sendMessage(target, MSG_NO_PENDING_REQUEST);
             return;
@@ -579,6 +598,10 @@ public final class DuelService {
 
     public void denyRequest(Player target) {
         requirePrimaryThread();
+        if (!permissionPort.has(target, PERMISSION_DUEL_DENY)) {
+            sendMessage(target, MSG_NO_PERMISSION);
+            return;
+        }
         if (pendingRequest == null || !pendingRequest.targetId().equals(target.getUniqueId())) {
             sendMessage(target, MSG_NO_PENDING_REQUEST);
             return;
@@ -592,6 +615,10 @@ public final class DuelService {
 
     public void requestDraw(Player player) {
         requirePrimaryThread();
+        if (!permissionPort.has(player, PERMISSION_DUEL_DRAW)) {
+            sendMessage(player, MSG_NO_PERMISSION);
+            return;
+        }
         if (queuedDuelStart != null && queuedDuelStart.involves(player.getUniqueId())) {
             Player requester = Bukkit.getPlayer(queuedDuelStart.requesterId());
             Player target = Bukkit.getPlayer(queuedDuelStart.targetId());
@@ -632,6 +659,10 @@ public final class DuelService {
 
     public void watchDuel(Player player) {
         requirePrimaryThread();
+        if (!permissionPort.has(player, PERMISSION_DUEL_SPECTATE)) {
+            sendMessageOrFallback(player, null, ChatColor.RED + "You do not have permission to spectate duels.");
+            return;
+        }
         if (activeDuel == null) {
             sendMessageOrFallback(player, "messages.duel-watch-unavailable", ChatColor.RED + "There is no active duel to watch.");
             return;
